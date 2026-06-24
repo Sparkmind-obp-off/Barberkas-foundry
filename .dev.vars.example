@@ -1,0 +1,8 @@
+# BarberKas AaaS — local dev secrets template
+# Copy to .dev.vars (gitignored) and fill. For prod use `wrangler secret put`.
+GROQ_API_KEY=
+OPENROUTER_API_KEY=
+FONNTE_TOKEN=
+WABLAS_TOKEN=
+DUITKU_MERCHANT_KEY=
+JWT_SECRET=change-me-to-a-long-random-string
