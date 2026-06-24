@@ -6,7 +6,10 @@ export type Bindings = {
   GROQ_API_KEY?: string
   OPENROUTER_API_KEY?: string
   FONNTE_TOKEN?: string
-  DUITKU_MERCHANT_KEY?: string
+  // Duitku Pop (MoR rel uang via Oasis BI Pro):
+  DUITKU_MERCHANT_CODE?: string   // cth: D20919
+  DUITKU_MERCHANT_KEY?: string    // API key (rahasia — wrangler secret put)
+  DUITKU_ENV?: 'sandbox' | 'production'
   JWT_SECRET?: string
 }
 

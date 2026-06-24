@@ -4,5 +4,8 @@ GROQ_API_KEY=
 OPENROUTER_API_KEY=
 FONNTE_TOKEN=
 WABLAS_TOKEN=
-DUITKU_MERCHANT_KEY=
+# Duitku Pop (MoR rel uang via Oasis BI Pro)
+DUITKU_MERCHANT_CODE=DXXXXX
+DUITKU_MERCHANT_KEY=your-duitku-api-key
+DUITKU_ENV=sandbox
 JWT_SECRET=change-me-to-a-long-random-string

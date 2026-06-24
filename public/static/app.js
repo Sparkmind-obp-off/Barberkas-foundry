@@ -162,6 +162,25 @@ function escapeHtml(s) { return s.replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<':
 const oapi = (path, opts = {}) =>
   fetch(`/api/v1/outcome${path}`, { headers: { 'x-tenant': TENANT, 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
 
+// Payment config (Duitku Pop live? + pop_js URL). Cached after first load.
+let PAY_CFG = null;
+let DUITKU_JS_LOADED = false;
+async function payConfig() {
+  if (!PAY_CFG) { const cfg = await oapi('/config'); PAY_CFG = cfg.payment || { live: false }; }
+  return PAY_CFG;
+}
+// Inject Duitku Pop JS once (env-specific URL), resolve when checkout global ready.
+function loadDuitkuJs(url) {
+  return new Promise((resolve, reject) => {
+    if (DUITKU_JS_LOADED && window.checkout) return resolve();
+    const s = document.createElement('script');
+    s.src = url; s.async = true;
+    s.onload = () => { DUITKU_JS_LOADED = true; resolve(); };
+    s.onerror = () => reject(new Error('Gagal memuat Duitku Pop JS'));
+    document.head.appendChild(s);
+  });
+}
+
 async function loadOutcome() {
   // delivery telemetry (TTO + DoO success-rate + GMV)
   const tel = await oapi('/telemetry/delivery');
@@ -182,9 +201,16 @@ async function loadOutcome() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="badge badge-info">${s.tier_label}</span>
         <span class="muted" style="font-size:.72rem">📐 ${escapeHtml(s.value_metric)}</span>
-        <button class="btn btn-primary btn-sm" onclick="checkoutSku('${s.slug}','${s.checkout}')">${s.checkout === 'instant' ? 'Checkout' : 'Minta Invoice'}</button>
+        <button class="btn btn-primary btn-sm" onclick="checkoutSku('${s.slug}','${s.checkout}')">${s.checkout === 'instant' ? 'Bayar (Duitku)' : 'Minta Invoice'}</button>
       </div>
     </div>`).join('');
+
+  // payment mode badge
+  const pcfg = await payConfig();
+  const payNote = pcfg.live
+    ? `<span class="badge badge-success" style="font-size:.7rem">💳 Duitku Pop LIVE (${pcfg.mode})</span>`
+    : `<span class="badge" style="font-size:.7rem;background:#3a2a12;color:#f5b14b">⚠️ Mode stub (tanpa kredensial)</span>`;
+  $('catalog-list').insertAdjacentHTML('afterbegin', `<div style="margin-bottom:8px">${payNote} <span class="muted" style="font-size:.7rem">· MoR: Oasis BI Pro</span></div>`);
 
   // orders + DoO
   const { orders } = await oapi('/orders');
@@ -193,20 +219,63 @@ async function loadOutcome() {
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:4px">
         <div style="display:flex;justify-content:space-between"><div class="li-main">${o.sku_name}</div><div class="li-amount">${rp(o.amount_cents)}</div></div>
         <div class="li-sub">${o.payment_status} · ${o.status} ${o.doo_passed ? '· ✓ DoO lulus' : ''} ${o.outcome_proof_url ? `· <a href="${o.outcome_proof_url}" target="_blank">bukti</a>` : ''}</div>
-        ${o.payment_status === 'pending' ? `<button class="btn btn-secondary btn-sm" onclick="payOrder('${o.id}')">Simulasi Bayar (sandbox)</button>` : ''}
+        ${(o.payment_status === 'pending' || o.payment_status === 'awaiting_payment') && o.mor_ref && o.mor_ref.charAt(0) === 'D' ? `<button class="btn btn-primary btn-sm" onclick="payDuitku('${o.id}','${o.mor_ref}')">Bayar Sekarang (Duitku Pop)</button>` : ''}
+        ${(o.payment_status === 'pending') && !(o.mor_ref && o.mor_ref.charAt(0) === 'D') ? `<button class="btn btn-secondary btn-sm" onclick="payOrder('${o.id}')">Simulasi Bayar (stub)</button>` : ''}
         ${o.payment_status === 'paid' && !o.doo_passed ? `<button class="btn btn-primary btn-sm" onclick="deliverOrder('${o.id}')">Tandai LIVE + Bukti (F5)</button>` : ''}
       </div>`).join('')
     : '<div class="loading">Belum ada pesanan. Coba checkout SKU di atas.</div>';
 }
 
+// Buat order → bila Duitku live, langsung buka Pop checkout.
 window.checkoutSku = async (slug, mode) => {
-  const res = await oapi('/checkout', { method: 'POST', body: JSON.stringify({ sku_slug: slug, tenant_id: 't_' + TENANT }) });
-  alert(`Order dibuat: ${res.sku}\n${res.amount_fmt}\nMoR: ${res.mor.provider} (${res.mor.mode})\nFee ${res.fee_fmt} · Net ${res.net_fmt}\n\n${res.note}`);
+  const res = await oapi('/checkout', { method: 'POST', body: JSON.stringify({ sku_slug: slug, tenant_id: 't_' + TENANT, shop_name: TENANT }) });
+  if (res.error) { alert('Checkout gagal: ' + res.error); loadOutcome(); return; }
+  // Duitku live + ada pop_reference → buka Pop
+  if (res.mor.mode === 'live' && res.mor.pop_reference) {
+    await openDuitkuPop(res.mor.pop_js, res.mor.pop_reference, res.order_id, res.mor.payment_url);
+  } else {
+    alert(`Order dibuat: ${res.sku}\n${res.amount_fmt}\nMoR: ${res.mor.provider}\nFee ${res.fee_fmt} · Net ${res.net_fmt}\n\n${res.note}`);
+  }
   loadOutcome();
 };
+
+// Buka Duitku Pop popup (Pop JS) atau fallback redirect ke payment_url.
+async function openDuitkuPop(popJs, reference, orderId, paymentUrl) {
+  try {
+    await loadDuitkuJs(popJs);
+    if (!window.checkout || typeof window.checkout.process !== 'function') throw new Error('checkout.process tidak tersedia');
+    window.checkout.process(reference, {
+      defaultLanguage: 'id',
+      successEvent: () => { alert('Pembayaran berhasil! Outcome sedang dirakit (F3→F5).'); pollOrder(orderId); },
+      pendingEvent: () => { alert('Pembayaran pending. Selesaikan sesuai instruksi.'); pollOrder(orderId); },
+      errorEvent: (r) => { alert('Pembayaran error: ' + JSON.stringify(r)); },
+      closeEvent: () => { loadOutcome(); },
+    });
+  } catch (e) {
+    // fallback: redirect ke halaman Duitku
+    if (paymentUrl) { window.open(paymentUrl, '_blank'); }
+    else alert('Tidak bisa membuka Duitku Pop: ' + e.message);
+  }
+}
+
+// Bayar ulang order yang sudah punya Duitku reference.
+window.payDuitku = async (orderId, reference) => {
+  const pcfg = await payConfig();
+  await openDuitkuPop(pcfg.pop_js, reference, orderId, null);
+};
+
+// Poll status order sampai paid (callback Duitku server-to-server).
+async function pollOrder(orderId, tries = 0) {
+  if (tries > 10) { loadOutcome(); return; }
+  const s = await oapi(`/orders/${orderId}/status`);
+  if (s.payment_status === 'paid') { loadOutcome(); return; }
+  setTimeout(() => pollOrder(orderId, tries + 1), 3000);
+}
+
+// Stub-only fallback (mode tanpa kredensial Duitku).
 window.payOrder = async (id) => {
   const res = await oapi('/pay/confirm', { method: 'POST', body: JSON.stringify({ order_id: id }) });
-  alert(res.error ? res.error : `Lunas (sandbox). Status: ${res.status}. ${res.next}`);
+  alert(res.error ? res.error : `Lunas (stub). Status: ${res.status}. ${res.next}`);
   loadOutcome();
 };
 window.deliverOrder = async (id) => {

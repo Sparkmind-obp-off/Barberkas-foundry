@@ -7,10 +7,22 @@ import type { Bindings, TenantContext } from '../types'
 import { tenantMiddleware } from '../middleware/tenant'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, TIER_LABEL, findSKU, classifyOutcome } from '../data/skus'
-import { morCharge } from '../lib/mor'
+import { morCharge, morFee } from '../lib/mor'
+import { duitkuConfig, verifyCallback } from '../lib/duitku'
 
 type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
 const outcome = new Hono<Env>()
+
+// ── Config — beri tahu frontend apakah Duitku Pop live + URL JS ───
+outcome.get('/config', (c) => {
+  const cfg = duitkuConfig(c.env)
+  return c.json({
+    payment: cfg
+      ? { provider: 'duitku-pop', mode: cfg.env, live: true, pop_js: cfg.popJs }
+      : { provider: 'stub', mode: 'sandbox-stub', live: false, pop_js: null },
+    mor: 'Oasis BI Pro',
+  })
+})
 
 // ── Catalog (Lapis 1 pasar) — public, no tenant needed ────────────
 outcome.get('/catalog', (c) => {
@@ -90,42 +102,158 @@ outcome.post('/checkout', async (c) => {
     sku.delivery_mode, sku.price_cents, 'IDR', sku.billing, 'pending', 'pending', t, t
   ).run()
 
-  const charge = await morCharge(c.env, { amount_cents: sku.price_cents, sku_slug: sku.slug, billing: sku.billing, order_id: oid })
-  await c.env.DB.prepare('UPDATE orders SET mor_ref=?, mor_provider=? WHERE id=?')
-    .bind(charge.ref, charge.provider, oid).run()
+  // base_url untuk callback/return (origin request)
+  const url = new URL(c.req.url)
+  const baseUrl = `${url.protocol}//${url.host}`
+
+  const charge = await morCharge(c.env, {
+    amount_cents: sku.price_cents,
+    sku_slug: sku.slug,
+    sku_name: sku.name,
+    billing: sku.billing,
+    order_id: oid,
+    email: b.email,
+    phone: b.phone || b.contact_phone,
+    shop_name: b.shop_name,
+    base_url: baseUrl,
+  })
+
+  await c.env.DB.prepare('UPDATE orders SET mor_ref=?, mor_provider=?, status=? WHERE id=?')
+    .bind(charge.ref, charge.provider, charge.error ? 'pending' : 'awaiting_payment', oid).run()
 
   return c.json({
     order_id: oid,
     sku: sku.name,
     amount_fmt: rupiah(sku.price_cents) + (sku.billing === 'subscription' ? '/bln' : ''),
-    mor: { ref: charge.ref, provider: charge.provider, mode: charge.mode, payment_url: charge.payment_url, disclosure: charge.disclosure },
+    mor: {
+      ref: charge.ref,
+      provider: charge.provider,
+      mode: charge.mode,
+      payment_url: charge.payment_url,
+      pop_reference: charge.pop_reference,   // utk Duitku Pop JS checkout.process()
+      pop_js: charge.pop_js,
+      disclosure: charge.disclosure,
+    },
     fee_fmt: rupiah(charge.fee_cents),
     net_fmt: rupiah(charge.net_cents),
-    note: charge.mode === 'sandbox-stub'
-      ? 'MODE SANDBOX: panggil POST /pay/confirm untuk simulasi pembayaran lunas (Truth-Lock: bukan uang nyata).'
-      : 'Selesaikan pembayaran di payment_url.',
+    error: charge.error || null,
+    note: charge.error
+      ? `Gagal membuat invoice Duitku: ${charge.error}`
+      : charge.mode === 'sandbox-stub'
+        ? 'MODE STUB: panggil POST /pay/confirm untuk simulasi lunas (Truth-Lock: bukan uang nyata).'
+        : 'Duitku Pop aktif: gunakan pop_reference + pop_js (checkout.process) atau buka payment_url.',
   }, 201)
 })
 
-// ── F2→F3 PAY CONFIRM — sandbox simulate paid + brand_ledger ───────
-outcome.post('/pay/confirm', async (c) => {
-  const b = await c.req.json<any>().catch(() => ({}))
-  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(b.order_id).first<any>()
-  if (!order) return c.json({ error: 'order tidak ditemukan' }, 404)
-  if (order.payment_status === 'paid') return c.json({ error: 'order sudah lunas (idempotent)' }, 409)
-
+// ── shared: tandai order lunas + catat brand_ledger (idempotent) ───
+async function markOrderPaid(c: any, order: any, source: string): Promise<boolean> {
+  if (order.payment_status === 'paid') return false // idempotent
   const t = now()
   await c.env.DB.prepare('UPDATE orders SET payment_status=?, paid_at=?, status=?, updated_at=? WHERE id=?')
     .bind('paid', t, 'assembling', t, order.id).run()
 
-  // brand_ledger (MoR disclosure)
-  const fee = Math.round(order.amount_cents * 0.025) + 100000
+  const fee = morFee(order.amount_cents)
   await c.env.DB.prepare(
     `INSERT INTO brand_ledger (id,tenant_id,order_id,brand,mor,amount_cents,fee_cents,net_cents,duitku_ref,disclosure,created_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(uid('bl_'), order.tenant_id, order.id, 'BarberKas', 'Oasis BI Pro', order.amount_cents, fee, order.amount_cents - fee, order.mor_ref, 'MoR Oasis BI Pro via Duitku', t).run()
+  ).bind(uid('bl_'), order.tenant_id, order.id, 'BarberKas', 'Oasis BI Pro', order.amount_cents, fee, order.amount_cents - fee, order.mor_ref, `MoR Oasis BI Pro via Duitku [${source}]`, t).run()
+  return true
+}
 
+// ── F2→F3 PAY CONFIRM — STUB-ONLY simulate paid (Truth-Lock guard) ─
+// Hanya boleh dipakai bila MoR mode = stub (tanpa kredensial Duitku).
+// Bila Duitku live aktif, pembayaran nyata HARUS lewat /duitku/callback.
+outcome.post('/pay/confirm', async (c) => {
+  const b = await c.req.json<any>().catch(() => ({}))
+  const cfg = duitkuConfig(c.env)
+  if (cfg) {
+    return c.json({
+      error: 'Duitku LIVE aktif — simulasi /pay/confirm dinonaktifkan. Selesaikan pembayaran via Pop (callback otomatis).',
+      hint: 'gunakan pop_reference (checkout.process) atau payment_url dari /checkout',
+    }, 403)
+  }
+  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(b.order_id).first<any>()
+  if (!order) return c.json({ error: 'order tidak ditemukan' }, 404)
+  if (order.payment_status === 'paid') return c.json({ error: 'order sudah lunas (idempotent)' }, 409)
+
+  await markOrderPaid(c, order, 'stub')
   return c.json({ order_id: order.id, payment_status: 'paid', status: 'assembling', next: 'F3 assemble → F4 deploy → F5 proof' })
+})
+
+// ── DUITKU CALLBACK (webhook) — server-to-server, sumber kebenaran lunas ──
+// Method POST x-www-form-urlencoded; verifikasi signature; idempotent.
+outcome.post('/duitku/callback', async (c) => {
+  const cfg = duitkuConfig(c.env)
+  if (!cfg) return c.text('duitku not configured', 503)
+
+  const form = await c.req.parseBody()
+  const merchantCode = String(form.merchantCode || '')
+  const amount = String(form.amount || '')
+  const merchantOrderId = String(form.merchantOrderId || '')
+  const resultCode = String(form.resultCode || '')
+  const reference = String(form.reference || '')
+  const signature = String(form.signature || '')
+
+  const valid = await verifyCallback(cfg, { merchantCode, amount, merchantOrderId, signature })
+  if (!valid) {
+    console.log('[duitku/callback] BAD SIGNATURE', { merchantOrderId, reference })
+    return c.text('Bad Signature', 400)
+  }
+
+  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(merchantOrderId).first<any>()
+  if (!order) {
+    console.log('[duitku/callback] order not found', merchantOrderId)
+    return c.text('order not found', 404)
+  }
+
+  // simpan duitku reference bila berubah
+  if (reference && order.mor_ref !== reference) {
+    await c.env.DB.prepare('UPDATE orders SET mor_ref=? WHERE id=?').bind(reference, order.id).run()
+    order.mor_ref = reference
+  }
+
+  if (resultCode === '00') {
+    await markOrderPaid(c, order, 'duitku-callback')
+    console.log('[duitku/callback] PAID', merchantOrderId, reference)
+  } else {
+    if (order.payment_status !== 'paid') {
+      await c.env.DB.prepare('UPDATE orders SET payment_status=?, updated_at=? WHERE id=?')
+        .bind('failed', now(), order.id).run()
+    }
+    console.log('[duitku/callback] FAILED resultCode=' + resultCode, merchantOrderId)
+  }
+  // Duitku hanya butuh HTTP 200
+  return c.text('OK', 200)
+})
+
+// ── DUITKU RETURN URL — redirect customer setelah bayar/cancel ─────
+outcome.get('/duitku/return', (c) => {
+  const merchantOrderId = c.req.query('merchantOrderId') || ''
+  const resultCode = c.req.query('resultCode') || ''
+  const reference = c.req.query('reference') || ''
+  const ok = resultCode === '00'
+  return c.html(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status Pembayaran — BarberKas</title>
+<style>body{font-family:system-ui,sans-serif;background:#0A0F1A;color:#E8EEF7;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#121A2A;border:1px solid #1F2C42;border-radius:16px;padding:32px;max-width:420px;text-align:center}
+.ico{font-size:56px}.t{font-size:22px;font-weight:700;margin:12px 0}.s{color:#8FA3BF;font-size:14px;line-height:1.5}
+a{display:inline-block;margin-top:20px;background:#3B82F6;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600}</style>
+</head><body><div class="card">
+<div class="ico">${ok ? '✅' : '⏳'}</div>
+<div class="t">${ok ? 'Pembayaran Berhasil' : 'Pembayaran Belum Selesai'}</div>
+<p class="s">${ok ? 'Terima kasih! Outcome kamu sedang dirakit (F3→F5). Bukti akan dikirim.' : 'Transaksi belum lunas / dibatalkan. Kamu bisa coba lagi dari dashboard.'}<br><br>
+Order: <strong>${merchantOrderId}</strong>${reference ? `<br>Ref Duitku: ${reference}` : ''}</p>
+<a href="/app">← Kembali ke Dashboard</a>
+</div></body></html>`)
+})
+
+// ── Order status (polling utk Pop JS frontend) ────────────────────
+outcome.get('/orders/:id/status', async (c) => {
+  const order = await c.env.DB.prepare('SELECT id,payment_status,status,doo_passed,outcome_proof_url FROM orders WHERE id=?')
+    .bind(c.req.param('id')).first<any>()
+  if (!order) return c.json({ error: 'not_found' }, 404)
+  return c.json(order)
 })
 
 // ── F4/F5 DEPLOY + PROOF — tandai outcome live + bukti + DoO gate ──
