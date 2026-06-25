@@ -37,6 +37,15 @@
 - **DoO gate** (Definition of Outcome): order tidak `done` sebelum semua cek lulus (fungsi/bahasa/truth-lock/mor/proof/onboard).
 - **Proof-of-Outcome**: artefak bukti (URL app live) tercatat + telemetry TTO & DoO success-rate.
 
+## 🧭 Foundry-Master Layer (OS sesi-kerja — `docs/ssot/foundry-master/`)
+Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten & anti-drift:
+- **FM-01 Master-Architect-Prompt** — prompt induk boot agent (peran + 6 hard-constraint + urutan wajib + gate HITL).
+- **FM-02 Master-Handoff** — template serah-terima antar-sesi (selesai/belum/blocker/next-step).
+- **FM-03 Master-Sprint-Kas** — sprint credit-aware (anggaran kas-kredit + kas-bisnis + exit-gate).
+- **FM-04 Resume-Boot** + `resume_boot.py` — resume keadaan repo dalam 1 perintah (zero-dep, read-only, Truth-Lock).
+- **Skill** `sovereign-barberkas-foundry-context-injection` — inject FM-01..04 + SSOT relevan + status repo ke konteks agent.
+- Boot cepat: `python3 docs/ssot/foundry-master/resume_boot.py` → ringkasan git + handoff terakhir + peta SSOT.
+
 ## 💳 Duitku Pop — Payment Gateway LIVE (MoR Oasis BI Pro)
 - **Real integration** via Duitku Pop `createInvoice` + Pop JS + callback webhook (bukan stub lagi).
 - **Signature** HMAC-SHA256 (Web Crypto, Workers-native): `createInvoice = HMAC(merchantCode+timestamp, apiKey)`, `callback = HMAC(merchantCode+amount+merchantOrderId, apiKey)`.
