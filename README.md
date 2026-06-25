@@ -5,6 +5,14 @@
 **Doctrine**: MASTER-ARCHITECT-PROMPT v5.0 + v7.0 + v8.0 OVERRIDE-LOCK · D-1 Truth-Lock
 **Bundle**: `BARBERKAS-AaaS-MASTER-BUNDLE-v1.0` (rev 1.1, Outcome-Foundry-aligned)
 
+## 🌐 Production (LIVE)
+- **Production URL**: https://barberkas-aaas.pages.dev
+- **Dashboard PWA**: https://barberkas-aaas.pages.dev/app
+- **GitHub**: https://github.com/Sparkmind-obp-off/Barberkas-foundry
+- **Platform**: Cloudflare Pages + D1 (`barberkas-production`, id `4ee30be7-2506-4a11-be1b-1537536067a2`)
+- **Payment**: Duitku Pop **LIVE** (production, merchant `D20919`) — MoR Oasis BI Pro
+- **Deploy**: CF BYOK (akun `sparkmind.support@gmail.com`)
+
 ## Project Overview
 - **Goal**: Layer Agent-as-a-Service di atas kasir digital barbershop UMKM Indonesia — bukan POS biasa, tapi *AI sales-team-in-a-box untuk capster*.
 - **Niche-first**: barbershop UMKM Purwokerto → Banyumas → Jateng → Indonesia.
@@ -78,11 +86,14 @@
 
 ## 🚀 Deployment
 - **Platform**: Cloudflare Pages + Workers (Hono v4 + Vite + TypeScript).
+- **Status produksi**: ✅ LIVE di https://barberkas-aaas.pages.dev (CF Pages + D1 remote)
 - **Status sandbox**: ✅ LIVE (PM2 + `wrangler pages dev` :3000)
 - **Tech Stack**: Hono · TypeScript · D1 · Vanilla JS PWA · Steel-Blue CSS design system
 - **MoR**: Oasis BI Pro via **Duitku Pop LIVE** (createInvoice + Pop JS + callback) — merchant `D20919`
-- **Secrets prod**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV` (via `wrangler pages secret put`)
-- **Last Updated**: 2026-06-24
+- **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`
+- **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
+- **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
+- **Last Updated**: 2026-06-25
 
 ### Perintah Dev
 ```bash
