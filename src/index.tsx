@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import type { Bindings, TenantContext } from './types'
 import api from './routes/api'
 import outcome from './routes/outcome'
+import webhooks from './routes/webhooks'
 import { landingPage } from './pages/landing'
 import { dashboardPage } from './pages/dashboard'
 
@@ -19,6 +20,9 @@ app.route('/api/v1', api)
 // Outcome Foundry pipeline (F0-F7): catalog/intake/checkout/pay/proof/orders
 // Public-safe: intake & catalog boleh diakses prospek (belum jadi tenant).
 app.route('/api/v1/outcome', outcome)
+
+// Inbound webhooks (Fonnte WA — Booking Curator real). Public, no subdomain.
+app.route('/webhooks', webhooks)
 
 // Pages
 app.get('/', (c) => c.html(landingPage()))

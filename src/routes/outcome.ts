@@ -7,8 +7,9 @@ import type { Bindings, TenantContext } from '../types'
 import { tenantMiddleware } from '../middleware/tenant'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, TIER_LABEL, findSKU, classifyOutcome } from '../data/skus'
-import { morCharge, morFee } from '../lib/mor'
+import { morCharge, morFee, DISCLOSURE } from '../lib/mor'
 import { duitkuConfig, verifyCallback } from '../lib/duitku'
+import { generateReceiptPDF } from '../lib/pdf'
 
 type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
 const outcome = new Hono<Env>()
@@ -300,6 +301,60 @@ outcome.post('/orders/:id/proof', async (c) => {
     outcome_proof_url: proofUrl,
     tto_days: tto,
     status: passed ? 'done' : 'proof (revisi diperlukan — gate belum lulus)',
+  })
+})
+
+// ── F2.5 FAKTUR PDF — generate receipt → simpan R2 → serve PDF ─────
+// GET → unduh PDF. Truth-Lock: faktur hanya untuk order lunas.
+outcome.get('/orders/:id/receipt', async (c) => {
+  const id = c.req.param('id')
+  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(id).first<any>()
+  if (!order) return c.json({ error: 'order tidak ditemukan' }, 404)
+  if (order.payment_status !== 'paid') {
+    return c.json({ error: 'faktur hanya tersedia untuk order LUNAS (Truth-Lock)' }, 402)
+  }
+
+  const fee = morFee(order.amount_cents)
+  const net = order.amount_cents - fee
+  const pdf = generateReceiptPDF({
+    title: 'FAKTUR / RECEIPT',
+    brand: 'BarberKas — SparkMind Sovereign',
+    order_id: order.id,
+    date_str: new Date(order.paid_at || order.created_at).toLocaleString('id-ID'),
+    shop_name: order.sku_name,
+    lines: [
+      { label: 'Produk (SKU)', value: order.sku_name },
+      { label: 'Tier', value: String(order.tier).toUpperCase() },
+      { label: 'Billing', value: order.billing },
+      { label: 'Ref Pembayaran', value: order.mor_ref || '-' },
+      { label: 'Biaya MoR', value: rupiah(fee) },
+      { label: 'Net Merchant', value: rupiah(net) },
+    ],
+    total_str: rupiah(order.amount_cents),
+    footer: DISCLOSURE,
+  })
+
+  // simpan ke R2 bila binding tersedia (idempotent by key)
+  const r2key = `receipts/${order.id}.pdf`
+  if (c.env.R2) {
+    try {
+      await c.env.R2.put(r2key, pdf, { httpMetadata: { contentType: 'application/pdf' } })
+      const exists = await c.env.DB.prepare('SELECT id FROM receipts WHERE order_id=?').bind(order.id).first<any>()
+      if (!exists) {
+        await c.env.DB.prepare(
+          'INSERT INTO receipts (id,tenant_id,order_id,r2_key,amount_cents,created_at) VALUES (?,?,?,?,?,?)'
+        ).bind(uid('rc_'), order.tenant_id, order.id, r2key, order.amount_cents, now()).run()
+      }
+    } catch (e) {
+      console.log('[receipt] R2 put failed (serve inline anyway):', String(e))
+    }
+  }
+
+  return new Response(pdf, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="faktur-${order.id}.pdf"`,
+    },
   })
 })
 
