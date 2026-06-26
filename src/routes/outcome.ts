@@ -8,6 +8,7 @@ import { tenantMiddleware } from '../middleware/tenant'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, TIER_LABEL, findSKU, classifyOutcome } from '../data/skus'
 import { estimatePrice } from '../data/verticals'
+import { CASES } from '../data/cases'
 import { morCharge, morFee, DISCLOSURE } from '../lib/mor'
 import { duitkuConfig, verifyCallback } from '../lib/duitku'
 import { generateReceiptPDF } from '../lib/pdf'
@@ -54,6 +55,23 @@ outcome.get('/price-estimate', (c) => {
   const care_plan = ['1', 'true', 'yes'].includes((c.req.query('care_plan') || '').toLowerCase())
   const est = estimatePrice({ base_slug, ai_staff_count, care_plan })
   return c.json(est, est.ok ? 200 : 400)
+})
+
+// ── R2 Case-study publik (proof-led, read-only) — Truth-Lock: status pilot|illustration ──
+outcome.get('/proofs', (c) => {
+  const vertical = c.req.query('vertical') || ''
+  const list = (vertical ? CASES.filter((x) => x.vertical_slug === vertical) : CASES).map((x) => ({
+    slug: x.slug,
+    vertical_slug: x.vertical_slug,
+    business: x.business,
+    location: x.location,
+    status: x.status, // pilot | illustration (jujur)
+    headline: x.headline,
+    delivery_mode: x.delivery_mode,
+    tto_days: x.tto_days,
+    sku_slug: x.sku_slug,
+  }))
+  return c.json({ proofs: list, note: 'status=pilot → bukti pilot nyata; status=illustration → skenario representatif (bukan klaim terverifikasi).' })
 })
 
 // ── F0 INTAKE — pembeli/prospek isi masalah → tiket + klasifikasi SKU ──

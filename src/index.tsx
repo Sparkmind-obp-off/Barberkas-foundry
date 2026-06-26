@@ -8,6 +8,8 @@ import { landingPage } from './pages/landing'
 import { dashboardPage } from './pages/dashboard'
 import { solutionsIndexPage, solutionPage } from './pages/solutions'
 import { findVertical } from './data/verticals'
+import { caseStudyIndexPage, casePage } from './pages/proof'
+import { findCase } from './data/cases'
 
 const app = new Hono<{ Bindings: Bindings; Variables: { tenant: TenantContext } }>()
 
@@ -36,6 +38,14 @@ app.get('/solutions/:slug', (c) => {
   const v = findVertical(c.req.param('slug'))
   if (!v) return c.html(solutionsIndexPage(), 404)
   return c.html(solutionPage(v))
+})
+
+// R2 — Bukti hasil / case-study publik (proof-led)
+app.get('/case-study', (c) => c.html(caseStudyIndexPage()))
+app.get('/proof/:slug', (c) => {
+  const cs = findCase(c.req.param('slug'))
+  if (!cs) return c.html(caseStudyIndexPage(), 404)
+  return c.html(casePage(cs))
 })
 
 export default app

@@ -20,7 +20,7 @@ export function landingPage(): string {
     <a href="/" class="brand"><span class="brand-mark">⊿</span> BarberKas <span class="brand-tag">v2 Agentic</span></a>
     <nav class="nav-links">
       <a href="/solutions">Solusi</a>
-      <a href="#proof">Bukti</a>
+      <a href="/case-study">Bukti</a>
       <a href="#agents">AI Staff</a>
       <a href="#pricing">Harga</a>
       <a href="/app" class="btn btn-primary btn-sm">Buka Demo App</a>
@@ -65,6 +65,9 @@ export function landingPage(): string {
           <p class="muted">Lewat MoR Oasis BI Pro (Duitku). Faktur otomatis terkirim ke WhatsApp.</p>
         </article>
       </div>
+      <p style="text-align:center;margin-top:1.2rem">
+        <a href="/case-study" class="btn btn-secondary">Lihat studi kasus & metrik before/after →</a>
+      </p>
     </div>
   </section>
 
