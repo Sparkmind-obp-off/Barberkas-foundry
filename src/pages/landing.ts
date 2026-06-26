@@ -19,6 +19,7 @@ export function landingPage(): string {
   <div class="container nav">
     <a href="/" class="brand"><span class="brand-mark">⊿</span> BarberKas <span class="brand-tag">v2 Agentic</span></a>
     <nav class="nav-links">
+      <a href="/solutions">Solusi</a>
       <a href="#proof">Bukti</a>
       <a href="#agents">AI Staff</a>
       <a href="#pricing">Harga</a>
@@ -36,7 +37,7 @@ export function landingPage(): string {
       <p class="hero-sub">Ceritakan barbershop-mu. Pulang bawa kasir &amp; booking yang sudah <strong>LIVE &amp; dipakai</strong> — bayar pakai QRIS. Bukan POS biasa, tapi AI sales-team-in-a-box untuk capster.</p>
       <div class="hero-cta">
         <a href="/app" class="btn btn-primary btn-lg">Coba Dashboard (Demo AlfaCut)</a>
-        <a href="#pricing" class="btn btn-secondary btn-lg">Lihat Tangga Harga</a>
+        <a href="/solutions" class="btn btn-secondary btn-lg">Solusi per Industri</a>
       </div>
       <p class="hero-note">100% Cloudflare-native · Onboarding &lt; 15 menit via WhatsApp · MoR Duitku live</p>
     </div>
@@ -112,8 +113,12 @@ export function landingPage(): string {
 
   <section class="section cta-final">
     <div class="container">
-      <h2>Siap bikin barbershop-mu jalan?</h2>
-      <a href="/app" class="btn btn-primary btn-lg">Buka Dashboard Demo</a>
+      <h2>Siap bikin usahamu jalan?</h2>
+      <p class="section-sub">Bukan cuma barbershop — salon, klinik, laundry, dan cafe juga. Lihat solusi untuk industrimu, hitung harga transparan, dan mulai intake.</p>
+      <div class="hero-cta">
+        <a href="/solutions" class="btn btn-primary btn-lg">Solusi per Industri</a>
+        <a href="/app" class="btn btn-secondary btn-lg">Buka Dashboard Demo</a>
+      </div>
     </div>
   </section>
 </main>

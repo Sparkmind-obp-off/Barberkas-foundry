@@ -57,7 +57,7 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 ## 🔌 Functional Entry URIs
 | Method | Path | Deskripsi |
 |---|---|---|
-| GET | `/` | Landing page (outcome-led) |
+| GET | `/` | Landing page (outcome-led) — **(R3/BKF-04)** menautkan ke `/solutions` di nav + hero + CTA final |
 | GET | `/app` | Dashboard PWA |
 | GET | `/health` | Health check |
 | GET | `/solutions` | **(R3)** Index solusi per-vertikal (barbershop/salon/klinik/laundry/cafe) |
@@ -105,7 +105,7 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-06-25
+- **Last Updated**: 2026-06-26 (BKF-04: landing → `/solutions` wiring)
 
 ### Perintah Dev
 ```bash
@@ -145,9 +145,10 @@ npx wrangler pages secret put DUITKU_ENV --project-name barberkas-aaas          
 
 ## 📖 User Guide (Demo)
 1. Buka `/` untuk landing, klik **Buka Dashboard Demo**.
-2. Di `/app`, gunakan tab bawah: **Home** (ringkasan + proof), **Transaksi** (catat baru), **AI** (panggil agent), **Customer**, **Booking**.
-3. Ganti tenant via dropdown kanan-atas (AlfaCut Pro / Scissor7 Trial).
-4. Tab **AI** → klik tile agent live (Stylist/Content/Booking) untuk lihat output nyata.
+2. Dari `/`, klik **Solusi per Industri** → `/solutions` (pilih vertikal: barbershop/salon/klinik/laundry/cafe) → intake + kalkulator harga + objection FAQ.
+3. Di `/app`, gunakan tab bawah: **Home** (ringkasan + proof), **Transaksi** (catat baru), **AI** (panggil agent), **Customer**, **Booking**.
+4. Ganti tenant via dropdown kanan-atas (AlfaCut Pro / Scissor7 Trial).
+5. Tab **AI** → klik tile agent live (Stylist/Content/Booking) untuk lihat output nyata.
 
 ---
 *SparkMind Sovereign Ecosystem · Cloudflare-native · D-1 Truth-Lock.*
