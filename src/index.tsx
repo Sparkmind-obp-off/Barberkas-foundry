@@ -6,6 +6,8 @@ import outcome from './routes/outcome'
 import webhooks from './routes/webhooks'
 import { landingPage } from './pages/landing'
 import { dashboardPage } from './pages/dashboard'
+import { solutionsIndexPage, solutionPage } from './pages/solutions'
+import { findVertical } from './data/verticals'
 
 const app = new Hono<{ Bindings: Bindings; Variables: { tenant: TenantContext } }>()
 
@@ -27,5 +29,13 @@ app.route('/webhooks', webhooks)
 // Pages
 app.get('/', (c) => c.html(landingPage()))
 app.get('/app', (c) => c.html(dashboardPage()))
+
+// R3 — Solusi per-vertikal (intake + kalkulator harga + objection FAQ)
+app.get('/solutions', (c) => c.html(solutionsIndexPage()))
+app.get('/solutions/:slug', (c) => {
+  const v = findVertical(c.req.param('slug'))
+  if (!v) return c.html(solutionsIndexPage(), 404)
+  return c.html(solutionPage(v))
+})
 
 export default app

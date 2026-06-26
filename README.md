@@ -60,6 +60,8 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 | GET | `/` | Landing page (outcome-led) |
 | GET | `/app` | Dashboard PWA |
 | GET | `/health` | Health check |
+| GET | `/solutions` | **(R3)** Index solusi per-vertikal (barbershop/salon/klinik/laundry/cafe) |
+| GET | `/solutions/:slug` | **(R3)** Halaman solusi per-vertikal: intake form + kalkulator harga + objection FAQ |
 | GET | `/api/v1/me` | Tenant context |
 | GET | `/api/v1/dashboard` | Ringkasan omzet/transaksi/booking/customer |
 | GET | `/api/v1/services` | Daftar layanan |
@@ -74,6 +76,7 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 | GET | `/api/v1/agent-calls` | Feed proof aktivitas AI |
 | GET | `/api/v1/outcome/config` | Status payment (Duitku live? + pop_js URL) |
 | GET | `/api/v1/outcome/catalog` | Katalog SKU outcome (public) |
+| GET | `/api/v1/outcome/price-estimate` | **(R3)** Kalkulator harga transparan `?base_slug&ai_staff_count&care_plan` (public, deterministik) |
 | POST | `/api/v1/outcome/intake` | F0 intake `{shop_name, contact_phone, problem}` → klasifikasi SKU |
 | POST | `/api/v1/outcome/checkout` | F2 buat order `{sku_slug, tenant_id?, email?, phone?}` → Duitku reference |
 | POST | `/api/v1/outcome/pay/confirm` | Simulasi lunas (STUB only; 403 bila Duitku live) |

@@ -45,8 +45,8 @@
 | Sprint | Tujuan | Output | Status |
 |---|---|---|---|
 | **R1** | Pivot kode: solutions + routes + landing | `/solutions`, `/developers`, OutcomeHome | ✅ DONE (live) |
-| **R2** | Proof & telemetry | kolom `outcome_proof`/`tto_days`/`delivery_mode`, halaman case-study | ⬜ Next |
-| **R3** | Konversi mainstream | intake form per-vertikal, kalkulator harga, objection FAQ | ⬜ |
+| **R2** | Proof & telemetry | kolom `outcome_proof`/`tto_days`/`delivery_mode`, halaman case-study | 🟨 Sebagian DONE (skema + `/telemetry/delivery` ada; halaman case-study publik belum) |
+| **R3** | Konversi mainstream | intake form per-vertikal, kalkulator harga, objection FAQ | ✅ DONE (BKF-20260626-03) — `/solutions` + `/solutions/:slug` (5 vertikal: barbershop/salon/klinik/laundry/cafe) + kalkulator `GET /api/v1/outcome/price-estimate` + intake form + objection FAQ. Build hijau (43 mod, 91.6 kB), curl+browser verified. |
 | **R4** | Retensi & expand | dashboard langganan (Care Plan/AI Staff), reminder, upsell high-ticket | ⬜ |
 | **R5** | Hybrid metered/outcome-bonus | metering AI Staff + kontrak outcome (hanya bila measurement matang) | ⬜ (gated) |
 

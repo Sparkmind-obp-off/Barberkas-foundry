@@ -7,6 +7,7 @@ import type { Bindings, TenantContext } from '../types'
 import { tenantMiddleware } from '../middleware/tenant'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, TIER_LABEL, findSKU, classifyOutcome } from '../data/skus'
+import { estimatePrice } from '../data/verticals'
 import { morCharge, morFee, DISCLOSURE } from '../lib/mor'
 import { duitkuConfig, verifyCallback } from '../lib/duitku'
 import { generateReceiptPDF } from '../lib/pdf'
@@ -44,6 +45,15 @@ outcome.get('/catalog', (c) => {
     business_role: s.business_role,
   }))
   return c.json({ catalog: skus, growth: 'education/vertical (land) → subscription (retain) → high-ticket (expand)' })
+})
+
+// ── R3 Kalkulator harga (deterministik, public) — sumber kebenaran harga = skus.ts ──
+outcome.get('/price-estimate', (c) => {
+  const base_slug = c.req.query('base_slug') || ''
+  const ai_staff_count = parseInt(c.req.query('ai_staff_count') || '0', 10) || 0
+  const care_plan = ['1', 'true', 'yes'].includes((c.req.query('care_plan') || '').toLowerCase())
+  const est = estimatePrice({ base_slug, ai_staff_count, care_plan })
+  return c.json(est, est.ok ? 200 : 400)
 })
 
 // ── F0 INTAKE — pembeli/prospek isi masalah → tiket + klasifikasi SKU ──
