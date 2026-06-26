@@ -19,6 +19,8 @@ Usage:
     python3 docs/ssot/foundry-master/resume_boot.py --health   # opt-in: ping production URL
     python3 docs/ssot/foundry-master/resume_boot.py --list-backups          # show known backups
     python3 docs/ssot/foundry-master/resume_boot.py --restore-from <tar.gz> # restore from backup (WRITES)
+    python3 docs/ssot/foundry-master/resume_boot.py --preflight              # 1-shot readiness gate (build tool/deps/dist/prod)
+    python3 docs/ssot/foundry-master/resume_boot.py --close-out              # scaffold next HANDOFF skeleton (WRITES one .md)
 
 Notes (Truth-Lock / credit-aware):
 - Default run = read-only, no network, no paid API.
@@ -301,6 +303,144 @@ def restore_from_backup(tarball, dest=None, dry_run=False):
     return info
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# NEW (FM-04 v3): one-shot session driver — preflight readiness + close-out scaffold
+# Doctrine: "1 sesi = boot → eksekusi penuh → tutup", anti-boros kredit, anti-lupa.
+# ════════════════════════════════════════════════════════════════════════════
+
+def preflight(do_network=False):
+    """1-shot readiness gate before EXECUTE. Read-only (network only if --health too).
+
+    Truth-Lock + credit-aware: jawab pertanyaan "apakah sesi ini siap eksekusi
+    penuh tanpa tebak-tebakan?" dalam SATU perintah. Cek lokal saja (gratis):
+    - build tooling (node_modules + vite) ada?  → kalau tidak: `npm ci` dulu
+    - dist/_worker.js ada (sudah pernah build)?
+    - wrangler config ada (siap deploy CF BYOK)?
+    - git bersih?  → kalau kotor, tutup sesi lama dulu
+    Mengembalikan ringkasan + verdict ('ready' / 'needs-setup') + saran 1-baris.
+    """
+    checks = []
+
+    def chk(name, ok, hint=""):
+        checks.append({"check": name, "ok": bool(ok), "hint": hint})
+
+    node_mods = os.path.isdir(os.path.join(REPO_ROOT, "node_modules"))
+    vite_bin = os.path.isfile(os.path.join(REPO_ROOT, "node_modules", ".bin", "vite"))
+    dist = os.path.isfile(os.path.join(REPO_ROOT, "dist", "_worker.js"))
+    pkg = os.path.isfile(os.path.join(REPO_ROOT, "package.json"))
+    wrangler = any(os.path.isfile(os.path.join(REPO_ROOT, f))
+                   for f in ("wrangler.jsonc", "wrangler.toml"))
+    g = collect_git()
+    clean = g["uncommitted_files"] == 0
+
+    chk("package.json ada", pkg, "repo inti hilang? cek clone")
+    chk("deps terpasang (node_modules+vite)", node_mods and vite_bin,
+        "jalankan: npm ci  (sebelum build)")
+    chk("dist/_worker.js (hasil build) ada", dist,
+        "jalankan: npm run build  (sebelum deploy/curl)")
+    chk("wrangler config ada (siap CF BYOK)", wrangler,
+        "tak ada wrangler.jsonc — deploy tak bisa")
+    chk("git bersih", clean,
+        f"{g['uncommitted_files']} file belum commit — tutup sesi lama dulu")
+
+    hard_fail = (not pkg) or (not wrangler)
+    needs_setup = (not (node_mods and vite_bin)) or (not dist)
+    verdict = "blocked" if hard_fail else ("needs-setup" if needs_setup else "ready")
+
+    nxt = {
+        "ready": "siap EXECUTE → build (bila kode berubah) → curl bukti → deploy CF BYOK → handoff.",
+        "needs-setup": "jalankan `npm ci && npm run build` dulu, lalu EXECUTE.",
+        "blocked": "repo inti/wrangler hilang — re-clone repo dulu.",
+    }[verdict]
+
+    ph = production_health(do_network=do_network)
+    return {"verdict": verdict, "checks": checks,
+            "production_health": ph, "saran": nxt}
+
+
+def close_out(date=None, dry_run=False):
+    """Scaffold the NEXT handoff skeleton (FM-02 shape). THE 2nd WRITE PATH.
+
+    Anti-lupa tutup sesi: auto-detect nomor handoff berikutnya (NN+1 utk tanggal
+    ini), pre-fill REPO state nyata (HEAD, recent commits) + NEXT-STEP template,
+    lalu tulis file kosong-terstruktur di handoffs/. Agent tinggal isi 1-7 lalu
+    refresh LATEST.md + backup. Tidak menyentuh file lain.
+    """
+    import datetime
+    today = date or datetime.datetime.now().strftime("%Y%m%d")
+    if not os.path.isdir(HANDOFFS_DIR):
+        return {"ok": False, "error": f"handoffs dir tidak ada: {HANDOFFS_DIR}"}
+    # next sequence number for today
+    nn = 1
+    existing = [f for f in os.listdir(HANDOFFS_DIR)
+                if f.upper().startswith(f"HANDOFF-BKF-{today}") and f.endswith(".md")]
+    if existing:
+        nums = []
+        for f in existing:
+            m = re.search(rf"HANDOFF-BKF-{today}-(\d+)\.md$", f, re.I)
+            if m:
+                nums.append(int(m.group(1)))
+        nn = (max(nums) + 1) if nums else (len(existing) + 1)
+    fname = f"HANDOFF-BKF-{today}-{nn:02d}.md"
+    fpath = os.path.join(HANDOFFS_DIR, fname)
+    g = collect_git()
+    recent = "\n".join(f"- `{c}`" for c in g["recent_commits"][:5])
+    iso = datetime.datetime.now().strftime("%Y-%m-%d")
+    skeleton = f"""# HANDOFF — BKF-{today}-{nn:02d}
+**Tanggal:** {iso} WIB
+**Agent:** Genspark AI Developer (Sovereign Architect mode)
+**Doctrine:** FM-01 v8.0 · D-1 Truth-Lock · OVERRIDE-CLOSE-OUT
+
+## 1. Scope sesi (SPRINT-KAS ringkas)
+<!-- isi: 1 outcome utama (OMTM) + anggaran kredit + exit-gate -->
+
+## 2. Yang SELESAI (terverifikasi — bukti, bukan klaim)
+<!-- isi: file diubah + bukti build (modul/kB) + curl/route -->
+
+## 3. Yang BELUM / di-skip (jujur)
+<!-- isi -->
+
+## 4. Blocker / GATE HITL
+<!-- isi: payment/legal/secret/domain/harga/D1-destruktif bila ada -->
+
+## 5. Verifikasi (perintah + hasil)
+<!-- isi: `npm run build` → ... ; `curl ...` → ... -->
+
+## 6. State repo saat tutup sesi
+- branch: `{g['branch']}`
+- HEAD (sebelum commit sesi ini): `{g['last_commit']}`
+- recent commits:
+{recent}
+
+## 7. NEXT STEP (untuk sesi berikutnya)
+1. **Boot disiplin:** `git clone` + `python3 docs/ssot/foundry-master/resume_boot.py --boot` lalu `--health`.
+2. **Preflight:** `python3 docs/ssot/foundry-master/resume_boot.py --preflight` (pastikan 'ready').
+3. <!-- prioritas berikutnya -->
+4. **Sebelum klaim "selesai":** `npm ci && npm run build` + curl bukti + update B5-05 §3.
+5. **Tutup sesi:** `--close-out` → isi handoff → refresh LATEST.md → ProjectBackup tar.gz → push.
+
+## 8. Catatan brutal-honest
+<!-- isi -->
+"""
+    info = {"file": fname, "path": os.path.relpath(fpath, REPO_ROOT),
+            "next_seq": nn, "dry_run": dry_run}
+    if os.path.isfile(fpath):
+        return {"ok": False, "error": f"sudah ada: {fname} (jangan timpa)"}
+    if dry_run:
+        info["ok"] = True
+        info["note"] = "dry-run: tidak menulis file"
+        info["preview_head"] = skeleton.splitlines()[0]
+        return info
+    try:
+        with open(fpath, "w", encoding="utf-8") as fh:
+            fh.write(skeleton)
+        info["ok"] = True
+        info["note"] = f"skeleton handoff dibuat → {info['path']} (isi §1-8, lalu refresh LATEST.md)"
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    return info
+
+
 def build_report(health=False):
     return {
         "repo_root": REPO_ROOT,
@@ -432,6 +572,32 @@ def main():
     if "--list-backups" in argv:
         print(json.dumps(find_backups(), ensure_ascii=False, indent=2))
         return
+
+    # --preflight: 1-shot readiness gate (read-only; +network if --health)
+    if "--preflight" in argv:
+        pf = preflight(do_network=("--health" in argv))
+        if "--json" in argv:
+            print(json.dumps(pf, ensure_ascii=False, indent=2))
+        else:
+            flag = {"ready": "✅ READY", "needs-setup": "🟨 NEEDS-SETUP",
+                    "blocked": "❌ BLOCKED"}[pf["verdict"]]
+            print(f"[PREFLIGHT] {flag}")
+            for c in pf["checks"]:
+                mark = "✅" if c["ok"] else "❌"
+                tail = "" if c["ok"] else f"  → {c['hint']}"
+                print(f"   {mark} {c['check']}{tail}")
+            ph = pf.get("production_health") or {}
+            if ph.get("checked"):
+                pflag = "✅ OK" if ph.get("ok") else "❌ DOWN"
+                print(f"   🌐 prod {ph.get('endpoint')} → {ph.get('status')} {pflag}")
+            print(f"   SARAN: {pf['saran']}")
+        sys.exit(0 if pf["verdict"] != "blocked" else 1)
+
+    # --close-out: scaffold next HANDOFF skeleton (WRITES one .md)
+    if "--close-out" in argv:
+        res = close_out(dry_run=("--dry-run" in argv))
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        sys.exit(0 if res.get("ok") else 1)
 
     # --boot: 1-line master boot prompt only
     if "--boot" in argv:

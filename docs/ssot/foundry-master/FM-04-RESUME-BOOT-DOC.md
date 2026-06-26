@@ -1,14 +1,16 @@
 # FM-04 · RESUME-BOOT — Resume Keadaan Repo dalam 1 Perintah
 ## SparkMind · BarberKas-Foundry · SSOT Foundry-Master
 
-> v2.0 · 2026-06-26 · Fokus: cara me-**resume** keadaan repo & sesi secara instan, lewat
+> v3.0 · 2026-06-26 · Fokus: cara me-**resume** keadaan repo & sesi secara instan, lewat
 > 1 dokumen + 1 script zero-dependency (`resume_boot.py`). "Buka sesi → langsung tahu posisi."
 > **Sumber kanonik:** `docs/ssot/foundry-master/FM-04-RESUME-BOOT-DOC.md`
 > **Script:** `docs/ssot/foundry-master/resume_boot.py`
 >
 > **v2.0 (anti-boros kredit, OPSI 2):** + auto-deteksi **backup tar.gz** (restore, bukan
 > rebuild) · + **production health check** opt-in (1 GET gratis ke `/health`) · + **1-baris
-> master boot prompt** (`--boot`) · + **restore dari backup** (`--restore-from`, satu-satunya
+> master boot prompt** (`--boot`) · + **restore dari backup** (`--restore-from`, mode tulis
+> v3.0 (one-shot session driver): + **`--preflight`** (gate kesiapan eksekusi 1-perintah) ·
+> + **`--close-out`** (scaffold handoff berikutnya otomatis — anti-lupa tutup sesi). Satu-satunya
 > mode yang menulis, safe-extract). Default run tetap **read-only · zero-dep · zero-network**.
 
 ═══════════════════════════════════════════════════════════════
@@ -49,6 +51,12 @@ python3 docs/ssot/foundry-master/resume_boot.py --health        # cek production
 python3 docs/ssot/foundry-master/resume_boot.py --list-backups  # daftar tar.gz backup terdeteksi
 python3 docs/ssot/foundry-master/resume_boot.py --restore-from <tar.gz> --dry-run  # pratinjau restore
 python3 docs/ssot/foundry-master/resume_boot.py --restore-from <tar.gz>            # restore (WRITES)
+
+# v3.0 — one-shot session driver (1 sesi = boot → eksekusi penuh → tutup):
+python3 docs/ssot/foundry-master/resume_boot.py --preflight     # gate kesiapan eksekusi (deps/build/dist/wrangler/git/prod)
+python3 docs/ssot/foundry-master/resume_boot.py --preflight --health  # + cek prod /health sekalian
+python3 docs/ssot/foundry-master/resume_boot.py --close-out --dry-run # pratinjau skeleton handoff berikutnya
+python3 docs/ssot/foundry-master/resume_boot.py --close-out           # scaffold HANDOFF-BKF-<tgl>-NN (WRITES 1 .md)
 ```
 
 > Tidak ada `pip install` apa pun. Hanya butuh Python 3 + `git` (sudah ada di sandbox).
@@ -61,7 +69,13 @@ python3 docs/ssot/foundry-master/resume_boot.py --restore-from <tar.gz>         
 | `--boot` | Cetak **1-baris** master boot prompt (tempel di awal sesi) | ❌ | ❌ | sumber: handoff + README |
 | `--health` | Satu HTTP GET stdlib ke `<production_url>/health` | ✅ (1×) | ❌ | gratis; tanpa secret/paid API |
 | `--list-backups` | Cari tar.gz (repo, `./backups`, `~`, `/home/user`, `/mnt/aidrive` — **shallow**) | ❌ | ❌ | hanya yg ber-nama hint `barberkas/foundry/bkf` atau di `backups/` |
-| `--restore-from <t>` | **Satu-satunya** mode tulis: ekstrak tar.gz (safe-extract, tolak `/`+`..`) | ❌ | ✅ | tambahkan `--dry-run` utk pratinjau dulu |
+| `--restore-from <t>` | Mode tulis (restore): ekstrak tar.gz (safe-extract, tolak `/`+`..`) | ❌ | ✅ | tambahkan `--dry-run` utk pratinjau dulu |
+| `--preflight` | **v3** Gate 1-perintah: cek `node_modules`+vite, `dist/_worker.js`, wrangler config, git bersih → verdict `ready`/`needs-setup`/`blocked` | ❌ (+`--health` opt-in) | ❌ | jawab "siap eksekusi penuh?" tanpa tebak |
+| `--close-out` | **v3** Mode tulis (scaffold): auto-deteksi `NN+1`, tulis skeleton `HANDOFF-BKF-<tgl>-NN.md` (FM-02 shape, pre-fill state git) | ❌ | ✅ | anti-lupa tutup sesi; tolak timpa file ada; `--dry-run` utk pratinjau |
+
+> **One-shot session driver (v3):** `--preflight` di awal (pastikan `ready`) + `--close-out`
+> di akhir (scaffold handoff otomatis) membuat **satu sesi = boot → build → verify → deploy
+> → handoff** tanpa drift/lupa — langsung memangkas kredit re-orientasi & sesi terbuang.
 
 > **Anti-boros kredit:** `--health` & `--restore-from` opt-in supaya boot harian tetap nol-biaya.
 > `--restore-from` mengembalikan state dari backup (restore, **bukan** rebuild dari nol) →
