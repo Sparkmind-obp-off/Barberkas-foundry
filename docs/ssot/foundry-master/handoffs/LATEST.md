@@ -34,3 +34,12 @@ Mandat owner (eksplisit): boot dari arsip repo (deep-dive) → akses & ekstrak f
 
 ## 5. Truth-Lock
 - Build/route = bukti curl nyata, bukan klaim. Angka MRR/subscription = catatan D1 nyata.
+
+## 6. HASIL DEPLOY CF BYOK (terverifikasi)
+- `setup_cloudflare_api_key` ✅ · `wrangler whoami` = sparkmind.support@gmail.com (acct a167a50f…).
+- **Migration prod (remote):** `0004_subscriptions.sql` ✅ applied (10 commands) ke barberkas-production.
+- **Deploy:** `wrangler pages deploy dist --project-name barberkas-aaas --branch main` ✅
+  → https://10427ee6.barberkas-aaas.pages.dev (alias prod https://barberkas-aaas.pages.dev).
+- **Curl prod 200:** `/health` `/` `/app` `/api/v1/subscriptions/plans`; R4 telemetry JSON valid dari D1 prod
+  (semua 0 = state prod bersih, tanpa angka karangan — Truth-Lock).
+- **Status:** R4/BKF-08 kini **LIVE di production** (sebelumnya prod = BKF-07).
