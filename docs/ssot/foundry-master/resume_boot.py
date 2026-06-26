@@ -21,6 +21,7 @@ Usage:
     python3 docs/ssot/foundry-master/resume_boot.py --restore-from <tar.gz> # restore from backup (WRITES)
     python3 docs/ssot/foundry-master/resume_boot.py --preflight              # 1-shot readiness gate (build tool/deps/dist/prod)
     python3 docs/ssot/foundry-master/resume_boot.py --close-out              # scaffold next HANDOFF skeleton (WRITES one .md)
+    python3 docs/ssot/foundry-master/resume_boot.py --deploy-gate            # (FM-04 v4) deploy CF BYOK policy + ready-to-paste steps (read-only)
 
 Notes (Truth-Lock / credit-aware):
 - Default run = read-only, no network, no paid API.
@@ -441,6 +442,79 @@ def close_out(date=None, dry_run=False):
     return info
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# NEW (FM-04 v4): deploy-gate — jawab "kapan deploy CF BYOK wajib vs opsional?"
+# Latar: sesi-sesi lalu sering berhenti SEBELUM deploy. Penyebabnya BUKAN kredit/
+# token habis, melainkan kebijakan GATE HITL (deploy production = butuh izin
+# owner eksplisit). Fungsi ini meng-eksplisit-kan kebijakan itu + mencetak
+# langkah CF BYOK siap-tempel, supaya tak ada lagi ambiguitas antar-sesi.
+# READ-ONLY: tidak deploy, tidak panggil API berbayar, tidak baca secret.
+# ════════════════════════════════════════════════════════════════════════════
+
+def deploy_gate(do_network=False):
+    """Kebijakan deploy CF BYOK + langkah siap-tempel. Read-only.
+
+    Mengembalikan:
+    - policy: ringkasan kapan deploy WAJIB vs OPSIONAL (Truth-Lock).
+    - state: dist build ada? wrangler config? git bersih? prod sekarang live?
+    - mandatory: apakah sesi ini SUDAH boleh deploy (gate terbuka)? Default False;
+      jadi True HANYA bila owner memberi izin eksplisit (di prompt sesi).
+    - steps: perintah CF BYOK berurutan yang aman ditempel.
+    """
+    g = collect_git()
+    dist = os.path.isfile(os.path.join(REPO_ROOT, "dist", "_worker.js"))
+    wrangler = any(os.path.isfile(os.path.join(REPO_ROOT, f))
+                   for f in ("wrangler.jsonc", "wrangler.toml"))
+    ps = product_status()
+    proj = "barberkas-aaas"
+    ph = production_health(do_network=do_network)
+
+    policy = {
+        "deploy_per_session_wajib": False,
+        "alasan": (
+            "Deploy production = GATE HITL (hard-constraint #6 OVERRIDE-CLOSE-OUT "
+            "mengecualikan GATE). Penyebab sesi lalu tak deploy = kebijakan izin, "
+            "BUKAN kredit/token habis. CF BYOK deploy muat dalam 1 sesi."
+        ),
+        "kapan_wajib": (
+            "Hanya bila owner memberi izin eksplisit di prompt sesi "
+            "(mis. 'wajib deploy ke Cloudflare via CF BYOK')."
+        ),
+        "kapan_opsional": (
+            "Bila handoff hanya bilang 'NEXT: deploy ...' tanpa izin owner di "
+            "sesi ini → tahan; cukup LIVE di sandbox + catat sebagai GATE HITL."
+        ),
+        "default_aman": "Tahan deploy; tutup sesi dengan handoff + backup.",
+    }
+
+    steps = [
+        "npm run build   # pastikan dist/_worker.js terbaru",
+        "# setup_cloudflare_api_key (tool) — inject CLOUDFLARE_API_TOKEN dari Deploy panel",
+        f"npx wrangler pages deploy dist --project-name {proj}",
+        f"curl -s https://{proj}.pages.dev/health        # bukti 200 OK",
+        f"curl -s -o /dev/null -w '%{{http_code}}' https://{proj}.pages.dev/case-study  # R2 LIVE",
+    ]
+
+    return {
+        "policy": policy,
+        "project_name": proj,
+        "state": {
+            "dist_build_ada": dist,
+            "wrangler_config_ada": wrangler,
+            "git_bersih": g["uncommitted_files"] == 0,
+            "product_version": ps.get("version") if isinstance(ps, dict) else None,
+        },
+        "production_health": ph,
+        "gate_terbuka_default": False,
+        "steps_cf_byok": steps,
+        "catatan": (
+            "Set gate terbuka HANYA setelah owner mengizinkan. Sebelum deploy: "
+            "git bersih + build hijau + curl bukti lokal. Sesudah: curl prod /health "
+            "+ /case-study, lalu update README + handoff."
+        ),
+    }
+
+
 def build_report(health=False):
     return {
         "repo_root": REPO_ROOT,
@@ -471,7 +545,7 @@ def print_human(r):
     import datetime
     line = "=" * 64
     print(line)
-    print(" BARBERKAS-FOUNDRY · RESUME-BOOT (FM-04 v2) · D-1 Truth-Lock")
+    print(" BARBERKAS-FOUNDRY · RESUME-BOOT (FM-04 v4) · D-1 Truth-Lock")
     print(line)
     g = r["git"]
     print(f"\n[REPO]   {os.path.basename(r['repo_root'])}  (branch: {g['branch']})")
@@ -592,6 +666,35 @@ def main():
                 print(f"   🌐 prod {ph.get('endpoint')} → {ph.get('status')} {pflag}")
             print(f"   SARAN: {pf['saran']}")
         sys.exit(0 if pf["verdict"] != "blocked" else 1)
+
+    # --deploy-gate: deploy CF BYOK policy + ready-to-paste steps (READ-ONLY)
+    if "--deploy-gate" in argv:
+        dg = deploy_gate(do_network=("--health" in argv))
+        if "--json" in argv:
+            print(json.dumps(dg, ensure_ascii=False, indent=2))
+        else:
+            print("================================================================")
+            print(" DEPLOY-GATE (FM-04 v4) · CF BYOK · D-1 Truth-Lock")
+            print("================================================================")
+            p = dg["policy"]
+            print(f"[KEBIJAKAN] deploy per-session WAJIB? → {p['deploy_per_session_wajib']}")
+            print(f"   alasan       : {p['alasan']}")
+            print(f"   kapan WAJIB  : {p['kapan_wajib']}")
+            print(f"   kapan OPSIONAL: {p['kapan_opsional']}")
+            print(f"   default aman : {p['default_aman']}")
+            s = dg["state"]
+            print("\n[STATE]")
+            print(f"   dist build ada   : {'✅' if s['dist_build_ada'] else '❌'}")
+            print(f"   wrangler config  : {'✅' if s['wrangler_config_ada'] else '❌'}")
+            print(f"   git bersih       : {'✅' if s['git_bersih'] else '❌'}")
+            ph = dg.get("production_health") or {}
+            if ph.get("checked"):
+                print(f"   prod /health     : {ph.get('status')} {'✅' if ph.get('ok') else '❌'}")
+            print(f"\n[LANGKAH CF BYOK — project {dg['project_name']}]")
+            for i, st in enumerate(dg["steps_cf_byok"], 1):
+                print(f"   {i}. {st}")
+            print(f"\n   CATATAN: {dg['catatan']}")
+        return
 
     # --close-out: scaffold next HANDOFF skeleton (WRITES one .md)
     if "--close-out" in argv:

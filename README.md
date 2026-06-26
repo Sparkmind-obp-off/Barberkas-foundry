@@ -42,7 +42,9 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **FM-01 Master-Architect-Prompt** — prompt induk boot agent (peran + 6 hard-constraint + urutan wajib + gate HITL).
 - **FM-02 Master-Handoff** — template serah-terima antar-sesi (selesai/belum/blocker/next-step).
 - **FM-03 Master-Sprint-Kas** — sprint credit-aware (anggaran kas-kredit + kas-bisnis + exit-gate).
-- **FM-04 Resume-Boot** + `resume_boot.py` — resume keadaan repo dalam 1 perintah (zero-dep, read-only, Truth-Lock).
+- **FM-04 Resume-Boot** + `resume_boot.py` (**v4**) — resume keadaan repo dalam 1 perintah (zero-dep, read-only, Truth-Lock).
+  - `--boot` (1-baris master prompt) · `--preflight` (gate readiness) · `--health` (ping prod) · `--close-out` (scaffold handoff) · `--list-backups` / `--restore-from`.
+  - **v4 baru:** `--deploy-gate` — kebijakan deploy CF BYOK (wajib vs opsional) + langkah siap-tempel. Menjawab: deploy **tidak wajib per-session**; hanya saat owner izinkan (GATE HITL), bukan karena kredit/token.
 - **Skill** `sovereign-barberkas-foundry-context-injection` — inject FM-01..04 + SSOT relevan + status repo ke konteks agent.
 - Boot cepat: `python3 docs/ssot/foundry-master/resume_boot.py` → ringkasan git + handoff terakhir + peta SSOT.
 
@@ -108,7 +110,7 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-06-26 (BKF-06: R2 case-study publik `/case-study` + `/proof/:slug` + API `/proofs`)
+- **Last Updated**: 2026-06-26 (BKF-07: R2 **DEPLOYED ke production** via CF BYOK [`barberkas-aaas`] + resume_boot v4 `--deploy-gate`)
 
 ### Perintah Dev
 ```bash
