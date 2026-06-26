@@ -74,6 +74,26 @@ export function dashboardPage(): string {
     <h3 class="sub-title">Pesanan & Bukti (DoO)</h3>
     <div id="orders-list" class="list"><div class="loading">Memuat…</div></div>
   </section>
+
+  <!-- LANGGANAN (R4 — retain & expand: Care Plan/AI Staff + reminder + upsell) -->
+  <section class="tab-panel hidden" id="tab-subs">
+    <div class="panel-head">
+      <h2 class="panel-title">Langganan</h2>
+      <button class="btn btn-primary btn-sm" id="btn-subscribe">+ Langganan</button>
+    </div>
+    <p class="section-sub" style="margin-bottom:var(--space-4)">Retain &amp; expand: Care Plan / AI Staff jalan tiap bulan → naik high-ticket. Truth-Lock: state nyata di D1.</p>
+    <div id="subs-telemetry" class="stat-grid" style="margin-bottom:var(--space-5)"></div>
+    <h3 class="sub-title">Langganan aktif</h3>
+    <div id="subs-list" class="list"><div class="loading">Memuat…</div></div>
+    <h3 class="sub-title">🚀 Upsell — Next Best Action</h3>
+    <div id="upsell-list" class="list"><div class="loading">Memuat…</div></div>
+    <h3 class="sub-title">🔔 Reminder terjadwal</h3>
+    <div class="panel-head" style="margin-bottom:var(--space-2)">
+      <span class="muted" style="font-size:.8rem" id="reminders-summary">…</span>
+      <button class="btn btn-secondary btn-sm" id="btn-run-reminders">Proses jatuh tempo</button>
+    </div>
+    <div id="reminders-list" class="list"><div class="loading">Memuat…</div></div>
+  </section>
 </main>
 
 <nav class="bottom-nav">
@@ -81,6 +101,7 @@ export function dashboardPage(): string {
   <button class="nav-item" data-tab="tx"><span class="nav-ico">🧾</span><span>Transaksi</span></button>
   <button class="nav-item nav-center" data-tab="ai"><span class="nav-ico">✨</span><span>AI</span></button>
   <button class="nav-item" data-tab="outcome"><span class="nav-ico">🎯</span><span>Outcome</span></button>
+  <button class="nav-item" data-tab="subs"><span class="nav-ico">💳</span><span>Langganan</span></button>
   <button class="nav-item" data-tab="book"><span class="nav-ico">📅</span><span>Booking</span></button>
 </nav>
 
@@ -118,6 +139,22 @@ export function dashboardPage(): string {
     <div class="modal-actions">
       <button class="btn btn-secondary" id="intake-cancel">Tutup</button>
       <button class="btn btn-primary" id="intake-submit">Klasifikasi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Subscribe Modal (R4) -->
+<div class="modal-overlay hidden" id="subs-modal">
+  <div class="modal">
+    <h3>Aktifkan Langganan</h3>
+    <p class="muted" style="font-size:.82rem;margin-bottom:var(--space-2)">Pilih paket retain (Care Plan / AI Staff). Harga = sumber kebenaran kode (Truth-Lock).</p>
+    <label class="label">Paket</label>
+    <select class="input" id="subs-plan"></select>
+    <label class="label">Jumlah (untuk AI Staff add-on)</label>
+    <input class="input" id="subs-qty" type="number" min="1" value="1">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="subs-cancel">Batal</button>
+      <button class="btn btn-primary" id="subs-save">Aktifkan</button>
     </div>
   </div>
 </div>

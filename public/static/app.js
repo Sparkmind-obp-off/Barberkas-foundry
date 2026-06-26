@@ -300,8 +300,94 @@ $('intake-submit').addEventListener('click', async () => {
     <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="checkoutSku('${res.classified_sku.slug}','instant');document.getElementById('intake-modal').classList.add('hidden')">Lanjut Checkout</button>`;
 });
 
+// ── R4: Langganan (retain & expand) ──
+const sapi = (path, opts = {}) =>
+  fetch(`/api/v1/subscriptions${path}`, { headers: { 'x-tenant': TENANT, 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
+
+async function loadSubs() {
+  // telemetry
+  const t = await sapi('/telemetry');
+  $('subs-telemetry').innerHTML = `
+    <div class="stat-card"><span class="stat-num">${t.mrr_fmt}</span><span class="stat-label">MRR</span></div>
+    <div class="stat-card"><span class="stat-num">${t.subscriptions_active}</span><span class="stat-label">Langganan aktif</span></div>
+    <div class="stat-card"><span class="stat-num">${t.churn_rate_pct}%</span><span class="stat-label">Churn</span></div>
+    <div class="stat-card"><span class="stat-num">${t.upsell_accept_rate_pct}%</span><span class="stat-label">Upsell accept</span></div>`;
+
+  // active subscriptions
+  const d = await sapi(`?tenant=${TENANT}`);
+  const subs = d.subscriptions || [];
+  $('subs-list').innerHTML = subs.length
+    ? subs.map((s) => `<div class="list-item">
+        <div><strong>${escapeHtml(s.sku_name)}</strong> <span class="badge ${s.status === 'active' ? 'badge-info' : 'badge-muted'}">${s.status}</span>
+        <div class="muted" style="font-size:.78rem">${s.amount_fmt} · jatuh tempo ${fmtDate(s.next_charge_at)}${s.qty > 1 ? ' · ' + s.qty + ' staff' : ''}</div></div>
+        ${s.status === 'active' ? `<button class="btn btn-secondary btn-sm" onclick="cancelSub('${s.id}')">Henti</button>` : ''}
+      </div>`).join('')
+    : '<div class="empty">Belum ada langganan. Klik “+ Langganan”.</div>';
+
+  // upsell next-best-action
+  const u = await sapi(`/upsell?tenant=${TENANT}`);
+  const ups = u.upsell || [];
+  $('upsell-list').innerHTML = ups.length
+    ? ups.map((x) => `<div class="card" style="margin-bottom:8px">
+        <strong>${escapeHtml(x.to_name)}</strong> <span class="badge badge-info">${x.delta_fmt}</span>
+        <p class="muted" style="font-size:.8rem;margin:6px 0">${escapeHtml(x.reason)}</p>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="respondUpsell('${x.upsell_id}','accepted','${x.to_sku}')">Terima</button>
+          <button class="btn btn-secondary btn-sm" onclick="respondUpsell('${x.upsell_id}','declined')">Nanti</button>
+        </div></div>`).join('')
+    : '<div class="empty">Belum ada rekomendasi upsell (aktifkan langganan dulu).</div>';
+
+  // reminders
+  const r = await sapi('/reminders');
+  const rems = r.reminders || [];
+  $('reminders-summary').textContent = `${rems.length} reminder · ${r.due_now} jatuh tempo sekarang`;
+  $('reminders-list').innerHTML = rems.length
+    ? rems.map((m) => `<div class="list-item">
+        <div><span class="badge badge-muted">${m.kind}</span> <span class="muted" style="font-size:.78rem">${m.status} · ${fmtDate(m.due_at)}</span>
+        <div style="font-size:.82rem">${escapeHtml(m.message)}</div></div></div>`).join('')
+    : '<div class="empty">Belum ada reminder.</div>';
+}
+
+async function cancelSub(id) {
+  if (!confirm('Hentikan langganan ini?')) return;
+  const reason = prompt('Alasan berhenti (opsional):') || '';
+  await sapi(`/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
+  loadSubs();
+}
+
+async function respondUpsell(id, decision, toSku) {
+  const res = await sapi(`/upsell/${id}/respond`, { method: 'POST', body: JSON.stringify({ decision }) });
+  if (decision === 'accepted' && res.next && res.next.action === 'subscribe') {
+    if (confirm('Aktifkan paket upgrade ini sekarang?')) {
+      await sapi('/subscribe', { method: 'POST', body: JSON.stringify({ sku_slug: toSku, tenant_id: TENANT }) });
+    }
+  }
+  loadSubs();
+}
+
+// Subscribe modal
+$('btn-subscribe').addEventListener('click', async () => {
+  const { plans } = await sapi('/plans');
+  $('subs-plan').innerHTML = plans.map((p) => `<option value="${p.slug}">${escapeHtml(p.name)} — ${p.price_fmt}</option>`).join('');
+  $('subs-modal').classList.remove('hidden');
+});
+$('subs-cancel').addEventListener('click', () => $('subs-modal').classList.add('hidden'));
+$('subs-save').addEventListener('click', async () => {
+  const sku_slug = $('subs-plan').value;
+  const qty = parseInt($('subs-qty').value, 10) || 1;
+  const res = await sapi('/subscribe', { method: 'POST', body: JSON.stringify({ sku_slug, qty, tenant_id: TENANT }) });
+  if (res.error) { alert(res.error); return; }
+  $('subs-modal').classList.add('hidden');
+  loadSubs();
+});
+$('btn-run-reminders').addEventListener('click', async () => {
+  const res = await sapi('/reminders/run', { method: 'POST' });
+  alert(`Diproses: ${res.processed} reminder jatuh tempo (ditandai terkirim).`);
+  loadSubs();
+});
+
 function loadTab(tab) {
-  ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome }[tab] || (() => {}))();
+  ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome, subs: loadSubs }[tab] || (() => {}))();
 }
 
 // init

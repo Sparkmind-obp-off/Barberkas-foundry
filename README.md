@@ -91,12 +91,23 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 | GET | `/api/v1/outcome/orders/:id/status` | Status order (polling Pop JS) |
 | POST | `/api/v1/outcome/orders/:id/proof` | F5 proof + DoO gate `{app_live, subdomain, tto_days, onboarded}` |
 | GET | `/api/v1/outcome/telemetry/delivery` | KPI delivery (GMV, DoO%, TTO median) |
+| GET | `/api/v1/subscriptions/plans` | **(R4)** Daftar SKU langganan (retain) untuk subscribe |
+| POST | `/api/v1/subscriptions/subscribe` | **(R4)** Aktifkan langganan `{sku_slug, qty?, tenant_id?}` → auto-jadwal reminder onboarding+renewal |
+| GET | `/api/v1/subscriptions?tenant=` | **(R4)** List langganan + MRR ringkas |
+| POST | `/api/v1/subscriptions/:id/cancel` | **(R4)** Churn `{reason?}` → batalkan reminder + jadwal winback (H+7) |
+| GET | `/api/v1/subscriptions/reminders` | **(R4)** Daftar reminder (`?status=`) + jumlah due |
+| POST | `/api/v1/subscriptions/reminders/run` | **(R4)** Engine: tandai reminder jatuh tempo "sent" (kirim WA via Fonnte terpisah) |
+| GET | `/api/v1/subscriptions/upsell?tenant=` | **(R4)** Rekomendasi upsell high-ticket (ladder retain→expand, deterministik) |
+| POST | `/api/v1/subscriptions/upsell/:id/respond` | **(R4)** Catat `{decision: accepted\|declined}` → next-best-action |
+| GET | `/api/v1/subscriptions/telemetry` | **(R4)** MRR/ARR, active, churn-rate, upsell-accept-rate, reminders due |
 
 > Semua endpoint `/api/v1/*` tenant-scoped. Sertakan header `x-tenant: alfacut` (atau `?tenant=`) di dev. Endpoint `outcome/catalog`, `outcome/intake`, `outcome/duitku/*` public-safe.
 
 ## 🗄️ Data Architecture
 - **Storage**: Cloudflare **D1** (SQLite) — local mode untuk dev.
 - **Tabel** (canonical §3): `tenants`, `capsters`, `services`, `customers`, `transactions`, `bookings`, `agent_calls`, `wa_messages`, `invoices`.
+- **Outcome Foundry** (0002): `intake_tickets`, `orders`, `outcome_proofs`, `brand_ledger`. **Pricing** (0003): `products`, `pricing_suggestions`, `receipts`.
+- **R4 Retain & Expand** (0004): `subscriptions` (MRR/next_charge), `reminders` (renewal/dunning/onboarding/winback), `upsell_events` (ladder retain→expand + accept-rate).
 - **Isolasi**: setiap tabel ber-`tenant_id`; middleware row-level filter wajib.
 - **Telemetry Outcome Foundry**: `tenants.outcome_proof_url`, `tto_days`, `delivery_mode` (B5-04 §6).
 - **Harga** disimpan `price_cents` (integer cents Rupiah).
@@ -110,7 +121,7 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-06-26 (BKF-07: R2 **DEPLOYED ke production** via CF BYOK [`barberkas-aaas`] + resume_boot v4 `--deploy-gate`)
+- **Last Updated**: 2026-06-26 (BKF-08: **R4 — Langganan (Care Plan/AI Staff) + reminder + upsell high-ticket** LIVE di sandbox · migration 0004 · 47 modul, `_worker.js` 114.08 kB · push origin/main. Deploy CF BYOK = opsional/GATE HITL)
 
 ### Perintah Dev
 ```bash
