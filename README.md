@@ -118,10 +118,11 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **Status sandbox**: ✅ LIVE (PM2 + `wrangler pages dev` :3000)
 - **Tech Stack**: Hono · TypeScript · D1 · Vanilla JS PWA · Steel-Blue CSS design system
 - **MoR**: Oasis BI Pro via **Duitku Pop LIVE** (createInvoice + Pop JS + callback) — merchant `D20919`
-- **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`
+- **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`, **`GROQ_API_KEY`**, **`OPENROUTER_API_KEY`**, **`FONNTE_TOKEN`** (BKF-10)
+- **AI Staff = LLM-powered LIVE**: agent Stylist/Content/Booking kini balas via **Groq** (`llama-3.3-70b-versatile`) di production — bukan rule-based lagi. Fallback OpenRouter → rule-based tetap aktif (Truth-Lock).
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-06-26 (BKF-08: **R4 — Langganan (Care Plan/AI Staff) + reminder + upsell high-ticket** LIVE di sandbox · migration 0004 · 47 modul, `_worker.js` 114.08 kB · push origin/main. Deploy CF BYOK = opsional/GATE HITL)
+- **Last Updated**: 2026-06-26 (BKF-10: **AI Staff LLM-powered LIVE** — set secrets `GROQ_API_KEY`/`OPENROUTER_API_KEY`/`FONNTE_TOKEN` di prod via CF BYOK + redeploy. Bukti: agent Stylist balas `"mode":"groq"` di https://barberkas-aaas.pages.dev. 46 modul, `_worker.js` 114.08 kB)
 
 ### Perintah Dev
 ```bash
@@ -153,7 +154,7 @@ npx wrangler pages secret put DUITKU_ENV --project-name barberkas-aaas          
 > Local dev: isi `.dev.vars` (gitignored) dari `.dev.vars.example`.
 
 ## 🧭 Recommended Next Steps
-1. Set secret `GROQ_API_KEY` (+`OPENROUTER_API_KEY`) → agent jadi LLM-powered.
+1. ✅ ~~Set secret `GROQ_API_KEY` (+`OPENROUTER_API_KEY`) → agent jadi LLM-powered.~~ (BKF-10: DONE — Groq live di prod)
 2. Provision D1 production: `wrangler d1 create barberkas-production` → update `wrangler.jsonc`.
 3. Integrasi Fonnte webhook `/webhooks/fonnte` untuk Booking Curator real WA.
 4. Tambah agent #4 (Pricing/Inventory) sesuai Sprint Plan.
