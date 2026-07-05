@@ -29,7 +29,8 @@
 - **Dashboard PWA** mobile-first, steel-blue Sovereign design system, bottom nav 5-item.
 - **Landing page** outcome-led + proof-led (Design System §OF).
 - **Multi-LLM abstraction** (Groq → OpenRouter → rule-based fallback). Tanpa API key, agent jalan rule-based berlabel jujur.
-- **Tenant switcher demo** (AlfaCut Pro / Scissor7 Trial).
+- **Tenant switcher** (Cut O'Clock — lead real / AlfaCut demo / Scissor7 demo) + deep-link `?tenant=`.
+- **Tenant real pertama (BKF-12)**: **Cut O'Clock Barbershop Semarang** (`cutoclock`, tier pro/trial) — 4 capster real (Ardi, Pras, Nanda, AL), 9 layanan real dari riset publik (IG @cutoclock.id, kumparan, linktr.ee); harga estimasi, TANPA transaksi fiktif. Link personal owner: `https://barberkas-foundry.biz.id/app?tenant=cutoclock`.
 
 ## ✅ Outcome Foundry Layer (Batch 5: B5-02/03/04)
 - **Pipeline F0→F7**: intake → scope/DoO → pay (MoR) → assemble → deploy → proof → onboard.
@@ -122,7 +123,8 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **AI Staff = LLM-powered LIVE**: agent Stylist/Content/Booking kini balas via **Groq** (`llama-3.3-70b-versatile`) di production — bukan rule-based lagi. Fallback OpenRouter → rule-based tetap aktif (Truth-Lock).
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-06-26 (BKF-10: **AI Staff LLM-powered LIVE** — set secrets `GROQ_API_KEY`/`OPENROUTER_API_KEY`/`FONNTE_TOKEN` di prod via CF BYOK + redeploy. Bukti: agent Stylist balas `"mode":"groq"` di https://barberkas-aaas.pages.dev. 46 modul, `_worker.js` 114.08 kB)
+- **Last Updated**: 2026-07-05 (BKF-12: **Tenant real Cut O'Clock Semarang LIVE** — migration `0005` di D1 prod + deploy CF BYOK. Bukti: `GET /api/v1/dashboard` `x-tenant: cutoclock` → `"Cut O'Clock Barbershop"` di prod. Deep-link `/app?tenant=cutoclock` aktif.)
+- **Prev**: 2026-06-26 (BKF-10: **AI Staff LLM-powered LIVE** — set secrets `GROQ_API_KEY`/`OPENROUTER_API_KEY`/`FONNTE_TOKEN` di prod via CF BYOK + redeploy. Bukti: agent Stylist balas `"mode":"groq"` di https://barberkas-aaas.pages.dev. 46 modul, `_worker.js` 114.08 kB)
 
 ### Perintah Dev
 ```bash
@@ -164,7 +166,7 @@ npx wrangler pages secret put DUITKU_ENV --project-name barberkas-aaas          
 1. Buka `/` untuk landing, klik **Buka Dashboard Demo**.
 2. Dari `/`, klik **Solusi per Industri** → `/solutions` (pilih vertikal: barbershop/salon/klinik/laundry/cafe) → intake + kalkulator harga + objection FAQ.
 3. Di `/app`, gunakan tab bawah: **Home** (ringkasan + proof), **Transaksi** (catat baru), **AI** (panggil agent), **Customer**, **Booking**.
-4. Ganti tenant via dropdown kanan-atas (AlfaCut Pro / Scissor7 Trial).
+4. Ganti tenant via dropdown kanan-atas (Cut O'Clock / AlfaCut demo / Scissor7 demo), atau langsung buka `/app?tenant=cutoclock`.
 5. Tab **AI** → klik tile agent live (Stylist/Content/Booking) untuk lihat output nyata.
 
 ---
