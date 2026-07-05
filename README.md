@@ -101,12 +101,25 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 | GET | `/api/v1/subscriptions/upsell?tenant=` | **(R4)** Rekomendasi upsell high-ticket (ladder retain→expand, deterministik) |
 | POST | `/api/v1/subscriptions/upsell/:id/respond` | **(R4)** Catat `{decision: accepted\|declined}` → next-best-action |
 | GET | `/api/v1/subscriptions/telemetry` | **(R4)** MRR/ARR, active, churn-rate, upsell-accept-rate, reminders due |
+| GET | `/api/v1/auth/config` | **(BKF-14)** Public: status auth Clerk + publishable key (frontend init) |
+| GET | `/api/v1/auth/me` | **(BKF-14)** User login saat ini + tenant mapping (Bearer token Clerk) |
+| POST | `/api/v1/auth/map` | **(BKF-14)** Admin only: map `{email, tenant, role}` → tenant |
+| GET | `/api/v1/auth/users` | **(BKF-14)** Admin only: daftar user + mapping |
 
-> Semua endpoint `/api/v1/*` tenant-scoped. Sertakan header `x-tenant: alfacut` (atau `?tenant=`) di dev. Endpoint `outcome/catalog`, `outcome/intake`, `outcome/duitku/*` public-safe.
+> Semua endpoint `/api/v1/*` tenant-scoped **dan digerbang auth Clerk (BKF-14)** — sertakan `Authorization: Bearer <session JWT Clerk>`. Owner hanya boleh akses tenant miliknya; admin lintas tenant. Endpoint `outcome/catalog`, `outcome/intake`, `outcome/duitku/*`, `/webhooks/fonnte`, landing/solutions/proof tetap public.
+
+## 🔐 Auth — Clerk.com (BKF-14)
+- **Model**: "login sebagai X → cuma lihat data X" — 1 user (email) → 1 tenant, role `owner|staff|admin` (admin = operator BarberKas, lintas tenant).
+- **Verifikasi JWT**: session token Clerk (RS256) diverifikasi di edge via JWKS + Web Crypto (`src/lib/clerk.ts`) — tanpa SDK Node, JWKS di-cache 1 jam per isolate.
+- **Instance Clerk**: `https://unified-sawfly-46.clerk.accounts.dev` (test). Frontend memuat Clerk JS dari CDN instance (host di-decode dari publishable key), mount widget SignIn di overlay `/app`.
+- **Gerbang backend**: `/api/v1/*` (kecuali `/auth/config`, outcome public), `/api/v1/subscriptions/*`, `/api/v1/retention/*`, `/webhooks/simulate|wa-log|conversations`. `/webhooks/fonnte` (inbound WA) tetap public.
+- **Auto-provision**: login pertama → row `users` dibuat/backfill `clerk_user_id`; bootstrap: bila belum ada admin & `ADMIN_EMAILS` kosong → user pertama otomatis admin.
+- **Truth-Lock**: tanpa `CLERK_SECRET_KEY`+`CLERK_ISSUER` → auth OFF (mode dev terbuka) dan diumumkan jujur via `/api/v1/auth/config`. `DEV_AUTH_BYPASS_EMAIL` hanya untuk `.dev.vars` lokal (JANGAN di prod).
+- **Onboarding owner**: operator login (admin) → `POST /api/v1/auth/map {"email":"owner@toko.com","tenant":"cutoclock","role":"owner"}` → owner login Google/OTP via Clerk → langsung ter-scope ke tokonya. Sertakan header `x-tenant: alfacut` (atau `?tenant=`) di dev. Endpoint `outcome/catalog`, `outcome/intake`, `outcome/duitku/*` public-safe.
 
 ## 🗄️ Data Architecture
 - **Storage**: Cloudflare **D1** (SQLite) — local mode untuk dev.
-- **Tabel** (canonical §3): `tenants`, `capsters`, `services`, `customers`, `transactions`, `bookings`, `agent_calls`, `wa_messages`, `invoices`.
+- **Tabel** (canonical §3): `tenants`, `capsters`, `services`, `customers`, `transactions`, `bookings`, `agent_calls`, `wa_messages`, `invoices`. **Auth (0007)**: `users` (clerk_user_id, email→tenant_id, role).
 - **Outcome Foundry** (0002): `intake_tickets`, `orders`, `outcome_proofs`, `brand_ledger`. **Pricing** (0003): `products`, `pricing_suggestions`, `receipts`.
 - **R4 Retain & Expand** (0004): `subscriptions` (MRR/next_charge), `reminders` (renewal/dunning/onboarding/winback), `upsell_events` (ladder retain→expand + accept-rate).
 - **Isolasi**: setiap tabel ber-`tenant_id`; middleware row-level filter wajib.
@@ -119,11 +132,12 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **Status sandbox**: ✅ LIVE (PM2 + `wrangler pages dev` :3000)
 - **Tech Stack**: Hono · TypeScript · D1 · Vanilla JS PWA · Steel-Blue CSS design system
 - **MoR**: Oasis BI Pro via **Duitku Pop LIVE** (createInvoice + Pop JS + callback) — merchant `D20919`
-- **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`, **`GROQ_API_KEY`**, **`OPENROUTER_API_KEY`**, **`FONNTE_TOKEN`** (BKF-10)
+- **Secrets prod (terpasang)**: `DUITKU_MERCHANT_CODE`, `DUITKU_MERCHANT_KEY`, `DUITKU_ENV=production`, `JWT_SECRET`, **`GROQ_API_KEY`**, **`OPENROUTER_API_KEY`**, **`FONNTE_TOKEN`** (BKF-10), **`CLERK_SECRET_KEY`**, **`CLERK_PUBLISHABLE_KEY`**, **`CLERK_ISSUER`** (BKF-14)
 - **AI Staff = LLM-powered LIVE**: agent Stylist/Content/Booking kini balas via **Groq** (`llama-3.3-70b-versatile`) di production — bukan rule-based lagi. Fallback OpenRouter → rule-based tetap aktif (Truth-Lock).
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-07-05 (BKF-12: **Tenant real Cut O'Clock Semarang LIVE** — migration `0005` di D1 prod + deploy CF BYOK. Bukti: `GET /api/v1/dashboard` `x-tenant: cutoclock` → `"Cut O'Clock Barbershop"` di prod. Deep-link `/app?tenant=cutoclock` aktif.)
+- **Last Updated**: 2026-07-05 (BKF-14: **Auth Clerk.com LIVE di production** — migration `0007` (users) di D1 prod + secrets Clerk + deploy CF BYOK. Bukti prod: `/api/v1/auth/config` → `enabled:true`, `/api/v1/dashboard?tenant=cutoclock` tanpa token → **401**, simulator WA tanpa token → **401**, landing & `/webhooks/fonnte` tetap public. Fix bug branding: simulator strict `?tenant=` — tak ada lagi fallback diam-diam ke tenant lain.)
+- **Prev**: 2026-07-05 (BKF-12: **Tenant real Cut O'Clock Semarang LIVE** — migration `0005` di D1 prod + deploy CF BYOK. Bukti: `GET /api/v1/dashboard` `x-tenant: cutoclock` → `"Cut O'Clock Barbershop"` di prod. Deep-link `/app?tenant=cutoclock` aktif.)
 - **Prev**: 2026-06-26 (BKF-10: **AI Staff LLM-powered LIVE** — set secrets `GROQ_API_KEY`/`OPENROUTER_API_KEY`/`FONNTE_TOKEN` di prod via CF BYOK + redeploy. Bukti: agent Stylist balas `"mode":"groq"` di https://barberkas-aaas.pages.dev. 46 modul, `_worker.js` 114.08 kB)
 
 ### Perintah Dev
