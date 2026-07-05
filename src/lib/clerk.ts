@@ -8,7 +8,7 @@ import type { Bindings } from '../types'
 
 export interface ClerkClaims {
   sub: string          // clerk user id (user_xxx)
-  iss: string          // https://<instance>.clerk.accounts.dev
+  iss: string          // prod: https://clerk.barberkas-foundry.biz.id (dev: https://<instance>.clerk.accounts.dev)
   exp: number
   nbf?: number
   iat?: number

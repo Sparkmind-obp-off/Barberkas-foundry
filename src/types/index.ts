@@ -14,7 +14,7 @@ export type Bindings = {
   // BKF-14 — Clerk.com auth:
   CLERK_SECRET_KEY?: string        // sk_test_… / sk_live_… (wrangler secret put)
   CLERK_PUBLISHABLE_KEY?: string   // pk_test_… (boleh public — dikirim ke frontend)
-  CLERK_ISSUER?: string            // https://<instance>.clerk.accounts.dev
+  CLERK_ISSUER?: string            // prod: https://clerk.barberkas-foundry.biz.id (dev: https://<instance>.clerk.accounts.dev)
   ADMIN_EMAILS?: string            // csv email operator BarberKas (auto role=admin saat login pertama)
   DEV_AUTH_BYPASS_EMAIL?: string   // HANYA .dev.vars lokal — bypass login utk test E2E. JANGAN set di prod.
 }

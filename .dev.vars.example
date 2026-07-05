@@ -9,3 +9,8 @@ DUITKU_MERCHANT_CODE=DXXXXX
 DUITKU_MERCHANT_KEY=your-duitku-api-key
 DUITKU_ENV=sandbox
 JWT_SECRET=change-me-to-a-long-random-string
+# Clerk auth (BKF-14/15) — prod pakai `wrangler pages secret put`
+CLERK_SECRET_KEY=sk_live_or_sk_test_xxx
+CLERK_PUBLISHABLE_KEY=pk_live_or_pk_test_xxx
+CLERK_ISSUER=https://clerk.barberkas-foundry.biz.id
+# DEV_AUTH_BYPASS_EMAIL=owner@cutoclock.test  # HANYA lokal E2E — JANGAN di prod
