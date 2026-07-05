@@ -1,6 +1,8 @@
 // BarberKas AaaS — Inbound webhooks (Fonnte WA).
-// /webhooks/fonnte : Booking Curator REAL — terima WA customer → buat booking →
-// balas otomatis via Fonnte. Truth-Lock: balasan hanya terkirim bila FONNTE_TOKEN set.
+// /webhooks/fonnte : AI Resepsionis v2 (BKF-13) — FSM multi-turn:
+//   cek slot kosong per-capster real-time → konfirmasi booking otomatis →
+//   reschedule/batal tanpa admin → auto-jadwal reminder H-1.
+// Truth-Lock: balasan WA nyata hanya terkirim bila FONNTE_TOKEN set (else stub).
 //
 // Tenant resolution (webhook tak punya subdomain):
 //   1) ?tenant=<subdomain>  (set di URL webhook Fonnte per-device)
@@ -8,10 +10,10 @@
 //   3) fallback tenant demo pertama (dev only)
 
 import { Hono } from 'hono'
-import type { Bindings, Tenant, TenantContext } from '../types'
+import type { Bindings, Tenant } from '../types'
 import { uid, now } from '../lib/d1'
 import { parseFonnteWebhook, fonnteSend, normalizePhone } from '../lib/fonnte'
-import { dispatchAgent } from '../agents'
+import { runReceptionist } from '../agents/receptionist'
 
 const webhooks = new Hono<{ Bindings: Bindings }>()
 
@@ -28,6 +30,44 @@ async function resolveTenant(c: any, deviceOrQuery?: string): Promise<Tenant | n
   }
   // dev fallback — tenant pertama
   return await c.env.DB.prepare('SELECT * FROM tenants ORDER BY created_at ASC LIMIT 1').first<Tenant>()
+}
+
+// core handler: 1 pesan WA masuk → FSM → balasan (+ kirim Fonnte bila !simulate)
+async function handleIncoming(c: any, tenant: Tenant, phone: string, message: string, name: string, simulate: boolean) {
+  const t0 = Date.now()
+
+  // log pesan masuk
+  await c.env.DB.prepare(
+    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(uid('wa_'), tenant.id, 'in', phone, message, 'receptionist', 'received', null, now()).run()
+
+  // AI Resepsionis v2 — FSM multi-turn
+  const result = await runReceptionist(c.env, tenant, phone, message, name)
+
+  // balas via Fonnte (skip saat simulasi dashboard)
+  const sent = simulate
+    ? { ok: false, mode: 'stub' as const, detail: 'simulate=1 — tidak kirim WA nyata' }
+    : await fonnteSend(c.env, phone, result.reply)
+
+  // log pesan keluar
+  await c.env.DB.prepare(
+    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(uid('wa_'), tenant.id, 'out', phone, result.reply, 'receptionist',
+    simulate ? 'simulated' : sent.ok ? 'sent' : sent.mode === 'stub' ? 'stub' : 'failed',
+    (sent as any).id || null, now()).run()
+
+  return {
+    ok: true,
+    tenant: tenant.subdomain,
+    reply: result.reply,
+    state: result.state,
+    action: result.action,
+    booking_id: result.booking_id || null,
+    reply_sent: sent.ok,
+    reply_mode: simulate ? 'simulated' : sent.mode,
+    reply_error: (sent as any).error || null,
+    duration_ms: Date.now() - t0,
+  }
 }
 
 // ── Fonnte incoming WA webhook ──────────────────────────────────
@@ -48,45 +88,47 @@ webhooks.post('/fonnte', async (c) => {
   const tenant = await resolveTenant(c, incoming.device)
   if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
 
-  // log pesan masuk
-  await c.env.DB.prepare(
-    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
-  ).bind(uid('wa_'), tenant.id, 'in', incoming.sender, incoming.message, 'booking', 'received', null, now()).run()
+  const out = await handleIncoming(c, tenant, incoming.sender, incoming.message, incoming.name || 'Customer WA', false)
+  return c.json(out)
+})
 
-  const ctx: TenantContext = {
-    tenant_id: tenant.id,
-    subdomain: tenant.subdomain,
-    tier: tenant.tier,
-    shop_name: tenant.shop_name,
-    request_id: crypto.randomUUID(),
-  }
+// ── Simulator WA (dashboard) — jalankan FSM tanpa kirim WA nyata ─
+// POST /webhooks/simulate  { phone, message, name?, tenant? }
+webhooks.post('/simulate', async (c) => {
+  const b = await c.req.json<any>().catch(() => ({}))
+  if (!b.phone || !b.message) return c.json({ ok: false, error: 'phone & message wajib' }, 400)
+  const tenant = await resolveTenant(c, undefined)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  const phone = normalizePhone(String(b.phone))
+  const out = await handleIncoming(c, tenant, phone, String(b.message), String(b.name || 'Simulasi'), true)
+  return c.json(out)
+})
 
-  // Booking Curator: parse WA → buat booking pending
-  const result = await dispatchAgent(c.env, ctx, 'booking', {
-    wa_message: incoming.message,
-    from_phone: incoming.sender,
-    customer_name: incoming.name || 'Customer WA',
-  })
+// ── WA log — riwayat percakapan (dashboard) ─────────────────────
+// GET /webhooks/wa-log?tenant=alfacut&phone=628…&limit=50
+webhooks.get('/wa-log', async (c) => {
+  const tenant = await resolveTenant(c, undefined)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  const phone = c.req.query('phone')
+  const limit = Math.min(200, parseInt(c.req.query('limit') || '50', 10) || 50)
 
-  const reply = String((result.output as any)?.confirmation_msg
-    || `Halo! Pesanmu sudah kami terima di ${tenant.shop_name}. Kami balas secepatnya ya ✂️`)
+  const q = phone
+    ? c.env.DB.prepare('SELECT * FROM wa_messages WHERE tenant_id=? AND phone=? ORDER BY created_at DESC LIMIT ?')
+        .bind(tenant.id, normalizePhone(phone), limit)
+    : c.env.DB.prepare('SELECT * FROM wa_messages WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?')
+        .bind(tenant.id, limit)
+  const { results } = await q.all<any>()
+  return c.json({ tenant: tenant.subdomain, messages: (results || []).reverse() })
+})
 
-  // balas otomatis via Fonnte (Truth-Lock: live hanya bila token set)
-  const sent = await fonnteSend(c.env, incoming.sender, reply)
-
-  // log pesan keluar
-  await c.env.DB.prepare(
-    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
-  ).bind(uid('wa_'), tenant.id, 'out', incoming.sender, reply, 'booking', sent.ok ? 'sent' : (sent.mode === 'stub' ? 'stub' : 'failed'), sent.id || null, now()).run()
-
-  return c.json({
-    ok: true,
-    tenant: tenant.subdomain,
-    booking: result.output,
-    reply_sent: sent.ok,
-    reply_mode: sent.mode,
-    reply_error: sent.error || null,
-  })
+// ── State percakapan aktif (debug/dashboard) ────────────────────
+webhooks.get('/conversations', async (c) => {
+  const tenant = await resolveTenant(c, undefined)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  const { results } = await c.env.DB.prepare(
+    'SELECT phone,state,context,expires_at,updated_at FROM wa_conversations WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 50'
+  ).bind(tenant.id).all<any>()
+  return c.json({ tenant: tenant.subdomain, conversations: results || [] })
 })
 
 // ── Test helper: kirim WA manual (tenant-scoped via ?tenant=) ───

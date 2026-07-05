@@ -390,8 +390,87 @@ $('btn-run-reminders').addEventListener('click', async () => {
   loadSubs();
 });
 
+// ── BKF-13: AI Resepsionis WA — simulator FSM + retensi ──
+const wapi = (path, opts = {}) =>
+  fetch(`/webhooks${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { headers: { 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
+const rapi = (path, opts = {}) =>
+  fetch(`/api/v1/retention${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { headers: { 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
+
+function waBubble(text, dir) {
+  const isOut = dir === 'out';
+  return `<div style="align-self:${isOut ? 'flex-start' : 'flex-end'};max-width:85%;background:${isOut ? '#1d2a3a' : '#1f6f43'};color:#e8f0f8;border-radius:12px;padding:8px 11px;font-size:.84rem;white-space:pre-wrap">${escapeHtml(text)}</div>`;
+}
+
+function waAppend(text, dir) {
+  const box = $('wa-chat');
+  box.insertAdjacentHTML('beforeend', waBubble(text, dir));
+  box.scrollTop = box.scrollHeight;
+}
+
+async function waSend(msg) {
+  const phone = $('wa-phone').value.trim();
+  if (!phone || !msg) return;
+  waAppend(msg, 'in');
+  $('wa-msg').value = '';
+  const res = await wapi('/simulate', { method: 'POST', body: JSON.stringify({ phone, message: msg, name: 'Simulasi Dashboard' }) });
+  if (res.reply) {
+    waAppend(res.reply, 'out');
+    const box = $('wa-chat');
+    box.insertAdjacentHTML('beforeend', `<div class="muted" style="font-size:.68rem;align-self:center">state: ${res.state} · action: ${res.action}${res.booking_id ? ' · booking: ' + res.booking_id : ''} · ${res.duration_ms}ms</div>`);
+    box.scrollTop = box.scrollHeight;
+  } else {
+    waAppend('⚠️ ' + (res.error || 'gagal'), 'out');
+  }
+  if (res.action === 'booked' || res.action === 'rescheduled' || res.action === 'cancelled') { loadRetention(); }
+}
+
+async function loadRetention() {
+  const t = await rapi('/telemetry');
+  $('ret-telemetry').innerHTML = `
+    <div class="stat"><div class="stat-label">Reminder terjadwal</div><div class="stat-value">${t.reminders_scheduled}</div></div>
+    <div class="stat"><div class="stat-label">Jatuh tempo</div><div class="stat-value accent">${t.reminders_due_now}</div></div>
+    <div class="stat"><div class="stat-label">Terkirim total</div><div class="stat-value">${t.reminders_sent_total}</div></div>
+    <div class="stat"><div class="stat-label">Customer idle ≥${t.retention_days}h</div><div class="stat-value">${t.customers_idle}</div></div>`;
+
+  const r = await rapi('/reminders');
+  const rems = r.reminders || [];
+  $('ret-summary').textContent = `${rems.length} reminder customer · ${r.due_now} jatuh tempo`;
+  $('ret-list').innerHTML = rems.length
+    ? rems.slice(0, 20).map((m) => `<div class="list-item">
+        <div><span class="badge ${m.kind === 'retention' ? 'badge-info' : 'badge-muted'}">${m.kind}</span>
+        <span class="badge ${m.status === 'sent' ? 'badge-success' : m.status === 'scheduled' ? 'badge-warning' : 'badge-muted'}">${m.status}</span>
+        <span class="muted" style="font-size:.75rem">${m.phone} · due ${fmtDate(m.due_at)}</span>
+        <div style="font-size:.8rem;margin-top:3px">${escapeHtml(m.message.slice(0, 140))}${m.message.length > 140 ? '…' : ''}</div></div></div>`).join('')
+    : '<div class="loading">Belum ada reminder customer. Booking via simulator WA → reminder H-1 otomatis dibuat.</div>';
+
+  const log = await wapi('/wa-log?limit=20');
+  const msgs = log.messages || [];
+  $('wa-log').innerHTML = msgs.length
+    ? msgs.slice(-20).map((m) => `<div class="list-item">
+        <div><span class="badge ${m.direction === 'in' ? 'badge-muted' : 'badge-info'}">${m.direction === 'in' ? '⬇ in' : '⬆ out'}</span>
+        <span class="muted" style="font-size:.72rem">${m.phone} · ${m.status} · ${fmtDate(m.created_at)}</span>
+        <div style="font-size:.8rem;margin-top:3px">${escapeHtml((m.body || '').slice(0, 120))}${(m.body || '').length > 120 ? '…' : ''}</div></div></div>`).join('')
+    : '<div class="loading">Belum ada log WA.</div>';
+}
+
+function loadWa() { loadRetention(); }
+
+$('wa-send').addEventListener('click', () => waSend($('wa-msg').value.trim()));
+$('wa-msg').addEventListener('keydown', (e) => { if (e.key === 'Enter') waSend($('wa-msg').value.trim()); });
+document.querySelectorAll('#wa-quick .chip').forEach((ch) => ch.addEventListener('click', () => waSend(ch.dataset.q)));
+$('btn-ret-scan').addEventListener('click', async () => {
+  const res = await rapi('/retention/scan', { method: 'POST' });
+  alert(`Scan retensi: ${res.created} reminder baru dibuat untuk customer idle.`);
+  loadRetention();
+});
+$('btn-ret-run').addEventListener('click', async () => {
+  const res = await rapi('/run-due', { method: 'POST' });
+  alert(`Diproses: ${res.processed}\nTerkirim: ${res.sent} · Stub: ${res.stub} · Gagal: ${res.failed}${res.note ? '\n\n' + res.note : ''}`);
+  loadRetention();
+});
+
 function loadTab(tab) {
-  ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome, subs: loadSubs }[tab] || (() => {}))();
+  ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome, subs: loadSubs, wa: loadWa }[tab] || (() => {}))();
 }
 
 // init

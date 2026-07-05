@@ -5,6 +5,7 @@ import api from './routes/api'
 import outcome from './routes/outcome'
 import subscriptions from './routes/subscriptions'
 import webhooks from './routes/webhooks'
+import retention from './routes/retention'
 import { landingPage } from './pages/landing'
 import { dashboardPage } from './pages/dashboard'
 import { solutionsIndexPage, solutionPage } from './pages/solutions'
@@ -29,6 +30,9 @@ app.route('/api/v1/outcome', outcome)
 // R4 — Retain & Expand: langganan (Care Plan/AI Staff) + reminder + upsell high-ticket.
 // Tenant opsional via ?tenant=/x-tenant; state nyata di D1 (Truth-Lock).
 app.route('/api/v1/subscriptions', subscriptions)
+
+// BKF-13 — Retensi customer: reminder H-1 booking + retensi 3-4 minggu + run-due Fonnte.
+app.route('/api/v1/retention', retention)
 
 // Inbound webhooks (Fonnte WA — Booking Curator real). Public, no subdomain.
 app.route('/webhooks', webhooks)

@@ -62,6 +62,45 @@ export function dashboardPage(): string {
     <div id="book-list" class="list"><div class="loading">Memuat…</div></div>
   </section>
 
+  <!-- WA — AI Resepsionis v2 (BKF-13): simulator FSM multi-turn + retensi -->
+  <section class="tab-panel hidden" id="tab-wa">
+    <h2 class="panel-title">💬 AI Resepsionis WA</h2>
+    <p class="section-sub" style="margin-bottom:var(--space-4)">Simulasi percakapan WhatsApp customer → FSM multi-turn: cek slot kosong per-capster real-time, booking, reschedule, batal — tanpa admin. (Pesan simulasi <strong>tidak</strong> dikirim ke WA nyata.)</p>
+    <div class="card" style="margin-bottom:var(--space-4)">
+      <label class="label">Nomor WA customer (simulasi)</label>
+      <input class="input" id="wa-phone" value="6281234509876" placeholder="628…">
+      <div id="wa-chat" style="max-height:320px;overflow-y:auto;background:var(--bg-primary,#0b1220);border-radius:10px;padding:10px;margin:10px 0;display:flex;flex-direction:column;gap:6px">
+        <div class="muted" style="font-size:.78rem">Mulai chat — coba: "halo", "booking", "cuci potong besok jam 3 sore", "ganti jadwal", "batal"…</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input class="input" id="wa-msg" placeholder="Ketik pesan WA customer…" style="flex:1;margin:0">
+        <button class="btn btn-primary" id="wa-send">Kirim</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px" id="wa-quick">
+        <span class="chip" data-q="halo">halo</span>
+        <span class="chip" data-q="menu">menu</span>
+        <span class="chip" data-q="booking">booking</span>
+        <span class="chip" data-q="cuci potong besok jam 3 sore">cuci potong besok jam 3 sore</span>
+        <span class="chip" data-q="ganti jadwal">ganti jadwal</span>
+        <span class="chip" data-q="batal">batal</span>
+      </div>
+    </div>
+
+    <h3 class="sub-title">🔁 Retensi &amp; Reminder Customer</h3>
+    <div id="ret-telemetry" class="stat-grid" style="margin-bottom:var(--space-3)"></div>
+    <div class="panel-head" style="margin-bottom:var(--space-2)">
+      <span class="muted" style="font-size:.8rem" id="ret-summary">…</span>
+      <span style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" id="btn-ret-scan">Scan idle 3-4 mgg</button>
+        <button class="btn btn-primary btn-sm" id="btn-ret-run">Kirim jatuh tempo</button>
+      </span>
+    </div>
+    <div id="ret-list" class="list"><div class="loading">Memuat…</div></div>
+
+    <h3 class="sub-title">📜 Log WA terakhir</h3>
+    <div id="wa-log" class="list"><div class="loading">Memuat…</div></div>
+  </section>
+
   <!-- OUTCOME (Outcome Foundry: katalog SKU + intake + orders/DoO) -->
   <section class="tab-panel hidden" id="tab-outcome">
     <div class="panel-head">
@@ -104,6 +143,7 @@ export function dashboardPage(): string {
   <button class="nav-item" data-tab="outcome"><span class="nav-ico">🎯</span><span>Outcome</span></button>
   <button class="nav-item" data-tab="subs"><span class="nav-ico">💳</span><span>Langganan</span></button>
   <button class="nav-item" data-tab="book"><span class="nav-ico">📅</span><span>Booking</span></button>
+  <button class="nav-item" data-tab="wa"><span class="nav-ico">💬</span><span>WA</span></button>
 </nav>
 
 <!-- New Transaction Modal -->
