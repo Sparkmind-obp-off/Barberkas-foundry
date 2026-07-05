@@ -1,5 +1,9 @@
 // BarberKas AaaS — Dashboard PWA client
-let TENANT = localStorage.getItem('bk_tenant') || 'alfacut';
+// Tenant resolution: ?tenant= di URL menang (untuk link personal, cth /app?tenant=cutoclock),
+// lalu pilihan tersimpan, lalu fallback demo alfacut.
+const _urlTenant = new URLSearchParams(location.search).get('tenant');
+if (_urlTenant) localStorage.setItem('bk_tenant', _urlTenant);
+let TENANT = _urlTenant || localStorage.getItem('bk_tenant') || 'alfacut';
 const api = (path, opts = {}) =>
   fetch(`/api/v1${path}`, { headers: { 'x-tenant': TENANT, 'Content-Type': 'application/json' }, ...opts })
     .then((r) => r.json());

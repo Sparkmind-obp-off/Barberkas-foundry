@@ -16,8 +16,9 @@ export function dashboardPage(): string {
   <a href="/" class="brand brand-sm"><span class="brand-mark">⊿</span> BarberKas</a>
   <div class="app-header-right">
     <select id="tenant-switch" class="tenant-switch" title="Ganti tenant (demo)">
-      <option value="alfacut">AlfaCut</option>
-      <option value="scissor7">Scissor7</option>
+      <option value="cutoclock">Cut O'Clock</option>
+      <option value="alfacut">AlfaCut (demo)</option>
+      <option value="scissor7">Scissor7 (demo)</option>
     </select>
     <span id="tier-badge" class="badge badge-info">…</span>
   </div>
