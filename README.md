@@ -88,10 +88,11 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 | POST | `/api/v1/outcome/pay/confirm` | Simulasi lunas (STUB only; 403 bila Duitku live) |
 | POST | `/api/v1/outcome/duitku/callback` | Webhook Duitku (form-urlencoded, signature-verified) |
 | GET | `/api/v1/outcome/duitku/return` | Halaman redirect customer setelah bayar |
-| GET | `/api/v1/outcome/orders` | List order |
-| GET | `/api/v1/outcome/orders/:id/status` | Status order (polling Pop JS) |
-| POST | `/api/v1/outcome/orders/:id/proof` | F5 proof + DoO gate `{app_live, subdomain, tto_days, onboarded}` |
-| GET | `/api/v1/outcome/telemetry/delivery` | KPI delivery (GMV, DoO%, TTO median) |
+| GET | `/api/v1/outcome/orders` | List order — **(BKF-16) admin only** |
+| GET | `/api/v1/outcome/orders/:id` | Detail order — **(BKF-16) admin only** |
+| GET | `/api/v1/outcome/orders/:id/status` | Status order (polling Pop JS) — public capability URL (uid acak) |
+| POST | `/api/v1/outcome/orders/:id/proof` | F5 proof + DoO gate `{app_live, subdomain, tto_days, onboarded}` — **(BKF-16) admin only** |
+| GET | `/api/v1/outcome/telemetry/delivery` | KPI delivery (GMV, DoO%, TTO median) — **(BKF-16) admin only** |
 | GET | `/api/v1/subscriptions/plans` | **(R4)** Daftar SKU langganan (retain) untuk subscribe |
 | POST | `/api/v1/subscriptions/subscribe` | **(R4)** Aktifkan langganan `{sku_slug, qty?, tenant_id?}` → auto-jadwal reminder onboarding+renewal |
 | GET | `/api/v1/subscriptions?tenant=` | **(R4)** List langganan + MRR ringkas |
@@ -105,6 +106,8 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 | GET | `/api/v1/auth/me` | **(BKF-14)** User login saat ini + tenant mapping (Bearer token Clerk) |
 | POST | `/api/v1/auth/map` | **(BKF-14)** Admin only: map `{email, tenant, role}` → tenant |
 | GET | `/api/v1/auth/users` | **(BKF-14)** Admin only: daftar user + mapping |
+| POST | `/api/v1/auth/tenants` | **(BKF-16)** Admin only: **self-service tenant onboarding** `{subdomain, shop_name, owner_phone, owner_email?, capsters[]?, tier?, trial_days?}` → tenant + layanan default + capster + map owner (idempotent 409) |
+| GET | `/api/v1/auth/tenants` | **(BKF-16)** Admin only: daftar tenant + agregat (users/services/capsters/tx) |
 
 > Semua endpoint `/api/v1/*` tenant-scoped **dan digerbang auth Clerk (BKF-14)** — sertakan `Authorization: Bearer <session JWT Clerk>`. Owner hanya boleh akses tenant miliknya; admin lintas tenant. Endpoint `outcome/catalog`, `outcome/intake`, `outcome/duitku/*`, `/webhooks/fonnte`, landing/solutions/proof tetap public.
 
@@ -112,7 +115,9 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **Model**: "login sebagai X → cuma lihat data X" — 1 user (email) → 1 tenant, role `owner|staff|admin` (admin = operator BarberKas, lintas tenant).
 - **Verifikasi JWT**: session token Clerk (RS256) diverifikasi di edge via JWKS + Web Crypto (`src/lib/clerk.ts`) — tanpa SDK Node, JWKS di-cache 1 jam per isolate.
 - **Instance Clerk**: **PRODUCTION** `https://clerk.barberkas-foundry.biz.id` (pk_live/sk_live, BKF-15) — sebelumnya dev `unified-sawfly-46.clerk.accounts.dev` (pk_test). Frontend memuat Clerk JS dari CDN instance (host di-decode dari publishable key → otomatis `clerk.barberkas-foundry.biz.id`), mount widget SignIn di overlay `/app`.
-- **Gerbang backend**: `/api/v1/*` (kecuali `/auth/config`, outcome public), `/api/v1/subscriptions/*`, `/api/v1/retention/*`, `/webhooks/simulate|wa-log|conversations`. `/webhooks/fonnte` (inbound WA) tetap public.
+- **Gerbang backend**: `/api/v1/*` (kecuali `/auth/config`, outcome public), `/api/v1/subscriptions/*`, `/api/v1/retention/*`, `/webhooks/simulate|wa-log|conversations`, **(BKF-16)** `/webhooks/fonnte/test-send` (kirim WA nyata — tak boleh anonim). `/webhooks/fonnte` (inbound WA) tetap public.
+- **(BKF-16) Admin-gate global**: `outcome/orders` (list+detail), `orders/:id/proof`, `telemetry/delivery`, `auth/tenants` → `requireAdmin`. Capability URL `orders/:id/status` & `orders/:id/receipt` tetap public (uid acak dipegang pembeli).
+- **(BKF-16) Tenant-scope subscriptions DITEGAKKAN**: non-admin selalu di-scope ke tenant miliknya (helper `scope()` — body/query `tenant_id` tenant lain diabaikan) + ownership check per-row (`cancel`, `upsell respond` → 403 jujur bila bukan miliknya).
 - **Auto-provision**: login pertama → row `users` dibuat/backfill `clerk_user_id`; bootstrap: bila belum ada admin & `ADMIN_EMAILS` kosong → user pertama otomatis admin.
 - **Truth-Lock**: tanpa `CLERK_SECRET_KEY`+`CLERK_ISSUER` → auth OFF (mode dev terbuka) dan diumumkan jujur via `/api/v1/auth/config`. `DEV_AUTH_BYPASS_EMAIL` hanya untuk `.dev.vars` lokal (JANGAN di prod).
 - **Onboarding owner**: operator login (admin) → `POST /api/v1/auth/map {"email":"owner@toko.com","tenant":"cutoclock","role":"owner"}` → owner login Google/OTP via Clerk → langsung ter-scope ke tokonya. Sertakan header `x-tenant: alfacut` (atau `?tenant=`) di dev. Endpoint `outcome/catalog`, `outcome/intake`, `outcome/duitku/*` public-safe.
@@ -136,7 +141,8 @@ Lapisan **PROSES** (tambah, jangan hancurkan) agar setiap sesi build konsisten &
 - **AI Staff = LLM-powered LIVE**: agent Stylist/Content/Booking kini balas via **Groq** (`llama-3.3-70b-versatile`) di production — bukan rule-based lagi. Fallback OpenRouter → rule-based tetap aktif (Truth-Lock).
 - **Callback URL (daftarkan di portal Duitku)**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/callback`
 - **Return URL**: `https://barberkas-aaas.pages.dev/api/v1/outcome/duitku/return`
-- **Last Updated**: 2026-07-05 (BKF-15: **Clerk upgrade ke PRODUCTION mode** — pk_test/sk_test diganti pk_live/sk_live, issuer `https://clerk.barberkas-foundry.biz.id` (custom domain, JWKS live kid `ins_3G5kfQ7J…`, sk_live tervalidasi via Clerk Backend API 200). Secrets prod di-rotate via CF BYOK + redeploy. Bukti prod: `/api/v1/auth/config` → `enabled:true` + `pk_live_…` + issuer production, tanpa token → **401**, token palsu → **401**, simulator WA → **401**, landing/`/app`/`/webhooks/fonnte` tetap public — juga terverifikasi di custom domain `barberkas-foundry.biz.id`.)
+- **Last Updated**: 2026-07-05 (BKF-16: **Tambal lubang auth + self-service tenant onboarding** — admin-gate `outcome/orders|:id|:id/proof|telemetry/delivery` + gerbang `/webhooks/fonnte/test-send`; subscriptions tenant-scope ditegakkan (scope() + ownership 403); `POST/GET /api/v1/auth/tenants` = onboarding tenant 1-request (tenant + 5 layanan default + capsters + map owner email, validasi subdomain + reserved + idempotent 409); frontend `oapi`/`aapi` bawa Bearer token + tab **Admin** di dashboard (form onboarding + daftar tenant). Test lokal: auth off → terbuka jujur; dev-bypass owner → 403 di semua endpoint admin, subs tenant lain 403, body-injection `tenant_id` ter-scope, capability URL tetap public.)
+- **Prev**: 2026-07-05 (BKF-15: **Clerk upgrade ke PRODUCTION mode** — pk_test/sk_test diganti pk_live/sk_live, issuer `https://clerk.barberkas-foundry.biz.id` (custom domain, JWKS live kid `ins_3G5kfQ7J…`, sk_live tervalidasi via Clerk Backend API 200). Secrets prod di-rotate via CF BYOK + redeploy. Bukti prod: `/api/v1/auth/config` → `enabled:true` + `pk_live_…` + issuer production, tanpa token → **401**, token palsu → **401**, simulator WA → **401**, landing/`/app`/`/webhooks/fonnte` tetap public — juga terverifikasi di custom domain `barberkas-foundry.biz.id`.)
 - **Prev**: 2026-07-05 (BKF-14: **Auth Clerk.com LIVE di production** — migration `0007` (users) di D1 prod + secrets Clerk + deploy CF BYOK. Bukti prod: `/api/v1/auth/config` → `enabled:true`, `/api/v1/dashboard?tenant=cutoclock` tanpa token → **401**, simulator WA tanpa token → **401**, landing & `/webhooks/fonnte` tetap public. Fix bug branding: simulator strict `?tenant=` — tak ada lagi fallback diam-diam ke tenant lain.)
 - **Prev**: 2026-07-05 (BKF-12: **Tenant real Cut O'Clock Semarang LIVE** — migration `0005` di D1 prod + deploy CF BYOK. Bukti: `GET /api/v1/dashboard` `x-tenant: cutoclock` → `"Cut O'Clock Barbershop"` di prod. Deep-link `/app?tenant=cutoclock` aktif.)
 - **Prev**: 2026-06-26 (BKF-10: **AI Staff LLM-powered LIVE** — set secrets `GROQ_API_KEY`/`OPENROUTER_API_KEY`/`FONNTE_TOKEN` di prod via CF BYOK + redeploy. Bukti: agent Stylist balas `"mode":"groq"` di https://barberkas-aaas.pages.dev. 46 modul, `_worker.js` 114.08 kB)

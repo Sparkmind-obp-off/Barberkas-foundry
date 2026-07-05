@@ -151,6 +151,22 @@ export async function tenantParamGuard(c: Context<AuthEnv>, next: Next) {
   await next()
 }
 
+// ── requireAdmin — endpoint operator BarberKas (lintas tenant) ──
+// BKF-16: gerbang endpoint global (orders list/detail, proof, telemetry
+// delivery, onboarding tenant). Auth off → mode dev terbuka (jujur via
+// /auth/config). WAJIB dipasang SETELAH authMiddleware.
+export async function requireAdmin(c: Context<AuthEnv>, next: Next) {
+  const enabled = isClerkConfigured(c.env) || Boolean(c.env.DEV_AUTH_BYPASS_EMAIL)
+  if (!enabled) return next() // auth off → dev terbuka
+
+  const user = c.get('authUser')
+  if (!user) return c.json({ error: 'unauthorized', message: 'Login diperlukan.' }, 401)
+  if (user.role !== 'admin') {
+    return c.json({ error: 'forbidden', message: 'Hanya admin (operator BarberKas).' }, 403)
+  }
+  await next()
+}
+
 // ── requireTenantAccess — dipasang SETELAH tenantMiddleware ─────
 // admin → bebas lintas tenant; owner/staff → hanya tenant miliknya.
 export async function requireTenantAccess(c: Context<AuthEnv>, next: Next) {

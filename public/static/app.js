@@ -178,8 +178,10 @@ $('tx-save').addEventListener('click', async () => {
 function escapeHtml(s) { return s.replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
 
 // ── OUTCOME FOUNDRY (catalog + intake + orders + DoO telemetry) ──
-const oapi = (path, opts = {}) =>
-  fetch(`/api/v1/outcome${path}`, { headers: { 'x-tenant': TENANT, 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
+// BKF-16: oapi ikut bawa Bearer token — /orders, /orders/:id/proof,
+// /telemetry/delivery kini admin-gated di backend.
+const oapi = async (path, opts = {}) =>
+  fetch(`/api/v1/outcome${path}`, { ...opts, headers: await authHeaders({ 'x-tenant': TENANT, ...(opts.headers || {}) }) }).then((r) => r.json());
 
 // Payment config (Duitku Pop live? + pop_js URL). Cached after first load.
 let PAY_CFG = null;
@@ -201,9 +203,12 @@ function loadDuitkuJs(url) {
 }
 
 async function loadOutcome() {
-  // delivery telemetry (TTO + DoO success-rate + GMV)
+  // delivery telemetry (TTO + DoO success-rate + GMV) — BKF-16: admin-gated.
+  // Non-admin dapat 403 → tampilkan info jujur, bukan error.
   const tel = await oapi('/telemetry/delivery');
-  $('delivery-telemetry').innerHTML = `
+  $('delivery-telemetry').innerHTML = tel.error
+    ? `<div class="muted" style="font-size:.78rem;grid-column:1/-1">🔒 Telemetry global hanya untuk admin (operator BarberKas).</div>`
+    : `
     <div class="stat"><div class="stat-label">GMV (lunas)</div><div class="stat-value accent">${tel.gmv_fmt}</div></div>
     <div class="stat"><div class="stat-label">Order Lunas</div><div class="stat-value">${tel.orders_paid}/${tel.orders_total}</div></div>
     <div class="stat"><div class="stat-label">DoO Success</div><div class="stat-value">${tel.doo_success_rate_pct}%</div></div>
@@ -231,8 +236,13 @@ async function loadOutcome() {
     : `<span class="badge" style="font-size:.7rem;background:#3a2a12;color:#f5b14b">⚠️ Mode stub (tanpa kredensial)</span>`;
   $('catalog-list').insertAdjacentHTML('afterbegin', `<div style="margin-bottom:8px">${payNote} <span class="muted" style="font-size:.7rem">· MoR: Oasis BI Pro</span></div>`);
 
-  // orders + DoO
-  const { orders } = await oapi('/orders');
+  // orders + DoO — BKF-16: admin-gated (403 utk non-admin → info jujur)
+  const ordRes = await oapi('/orders');
+  if (ordRes.error) {
+    $('orders-list').innerHTML = '<div class="muted" style="font-size:.78rem">🔒 Daftar pesanan global hanya untuk admin (operator BarberKas).</div>';
+    return;
+  }
+  const orders = ordRes.orders || [];
   $('orders-list').innerHTML = orders.length
     ? orders.map((o) => `
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:4px">
@@ -485,8 +495,63 @@ $('btn-ret-run').addEventListener('click', async () => {
 });
 
 function loadTab(tab) {
-  ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome, subs: loadSubs, wa: loadWa }[tab] || (() => {}))();
+  ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome, subs: loadSubs, wa: loadWa, admin: loadAdmin }[tab] || (() => {}))();
 }
+
+// ── BKF-16: Panel Admin — self-service tenant onboarding (operator BarberKas) ──
+const aapi = async (path, opts = {}) =>
+  fetch(`/api/v1/auth${path}`, { ...opts, headers: await authHeaders(opts.headers || {}) }).then((r) => r.json());
+
+async function loadAdmin() {
+  const res = await aapi('/tenants');
+  const list = $('admin-tenant-list');
+  if (res.error) { list.innerHTML = `<div class="muted" style="font-size:.78rem">🔒 ${res.message || res.error}</div>`; return; }
+  const tenants = res.tenants || [];
+  list.innerHTML = tenants.length
+    ? tenants.map((t) => `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;gap:4px">
+        <div style="display:flex;justify-content:space-between;gap:8px">
+          <div class="li-main">${escapeHtml(t.shop_name)} <span class="muted" style="font-size:.72rem">(${t.subdomain})</span></div>
+          <span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-info'}">${t.status}</span>
+        </div>
+        <div class="li-sub">tier: ${t.tier} · 👤 ${t.users_mapped} user · ✂️ ${t.services} layanan · 💈 ${t.capsters} capster · 🧾 ${t.transactions} tx
+          ${t.owner_email ? ` · 📧 ${escapeHtml(t.owner_email)}` : ''}</div>
+        <div class="li-sub"><a href="/app?tenant=${t.subdomain}">buka dashboard →</a></div>
+      </div>`).join('')
+    : '<div class="loading">Belum ada tenant.</div>';
+}
+
+document.addEventListener('DOMContentLoaded', () => {});
+const obForm = $('onboard-form');
+if (obForm) obForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const capsters = $('ob-capsters').value.split(',').map((s) => s.trim()).filter(Boolean);
+  $('ob-result').textContent = 'Membuat tenant…';
+  const res = await aapi('/tenants', { method: 'POST', body: JSON.stringify({
+    subdomain: $('ob-subdomain').value.trim(),
+    shop_name: $('ob-shop').value.trim(),
+    owner_phone: $('ob-phone').value.trim(),
+    owner_email: $('ob-email').value.trim() || undefined,
+    capsters,
+    tier: $('ob-tier').value,
+    trial_days: parseInt($('ob-trial').value, 10) || 0,
+  }) });
+  if (res.error) { $('ob-result').textContent = '⚠️ ' + (res.message || res.error); return; }
+  $('ob-result').innerHTML = `✅ Tenant <strong>${res.tenant.subdomain}</strong> dibuat — ${res.services_seeded} layanan, ${res.capsters_seeded} capster${res.owner_mapped ? `, owner ${res.owner_mapped} ter-map` : ''}. <a href="${res.dashboard_url}">buka dashboard →</a><br>${res.next}`;
+  obForm.reset(); $('ob-trial').value = '14';
+  loadAdmin();
+});
+
+const mpForm = $('map-form');
+if (mpForm) mpForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('mp-result').textContent = 'Mapping…';
+  const res = await aapi('/map', { method: 'POST', body: JSON.stringify({
+    email: $('mp-email').value.trim(), tenant: $('mp-tenant').value.trim(), role: $('mp-role').value,
+  }) });
+  $('mp-result').textContent = res.error ? '⚠️ ' + (res.message || res.error) : `✅ ${res.email} → ${res.tenant} (${res.role})`;
+  if (!res.error) { mpForm.reset(); loadAdmin(); }
+});
 
 // ── BKF-14: Boot auth → baru load dashboard ──
 // 1) /auth/config public: auth aktif? publishable key?
@@ -509,8 +574,10 @@ async function initAuth() {
   AUTH.enabled = Boolean(cfg.enabled);
 
   if (!AUTH.enabled) {
-    // auth off (dev terbuka / dev bypass) — langsung masuk
+    // auth off (dev terbuka / dev bypass) — langsung masuk.
+    // BKF-16: mode dev → panel Admin terlihat (backend juga terbuka, jujur via /auth/config)
     if (cfg.dev_bypass) console.info('[auth] dev bypass aktif');
+    const na = $('nav-admin'); if (na) na.classList.remove('hidden');
     return true;
   }
 
@@ -545,6 +612,10 @@ async function initAuth() {
   if (!me || !me.authenticated) { showAuthOverlay(true, '⚠️ Sesi tidak valid — coba muat ulang.'); return false; }
   AUTH.user = me.user;
 
+  // BKF-16: admin → tampilkan tab Admin (onboarding tenant self-service)
+  if (me.user.role === 'admin') {
+    const na = $('nav-admin'); if (na) na.classList.remove('hidden');
+  }
   if (me.user.role !== 'admin') {
     if (!me.user.tenant_subdomain) {
       showAuthOverlay(true, `Akun ${me.user.email} belum di-map ke barbershop manapun. Hubungi operator BarberKas.`);

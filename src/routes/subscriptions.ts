@@ -4,11 +4,12 @@
 // Selaras B5-03 (retain→expand), skus.ts = sumber kebenaran harga.
 
 import { Hono } from 'hono'
-import type { Bindings, TenantContext } from '../types'
+import type { Bindings, TenantContext, AuthUser } from '../types'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, findSKU } from '../data/skus'
+import { isClerkConfigured } from '../lib/clerk'
 
-type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
+type Env = { Bindings: Bindings; Variables: { tenant: TenantContext; authUser: AuthUser | null } }
 const subs = new Hono<Env>()
 
 const DAY = 86_400_000 // ms/hari
@@ -17,6 +18,26 @@ const MONTH = 30 * DAY
 // resolve tenant_id opsional (query/header) tanpa memaksa middleware — langganan boleh lintas-prospek.
 function tenantId(c: any): string | null {
   return c.req.query('tenant') || c.req.header('x-tenant') || null
+}
+
+// ── BKF-16: scope tenant yang DITEGAKKAN (bukan sekadar dipercaya dari query) ──
+// tenantParamGuard (index.tsx) sudah memastikan non-admin → ?tenant= == miliknya.
+// Helper ini melengkapi: (a) non-admin SELALU di-scope ke tenant miliknya sendiri,
+// apa pun isi body/query; (b) verifikasi ownership row per-id. Auth off → dev terbuka.
+function scope(c: any): { tid: string | null; enforced: boolean } {
+  const enabled = isClerkConfigured(c.env) || Boolean(c.env.DEV_AUTH_BYPASS_EMAIL)
+  const user = c.get('authUser') as AuthUser | null
+  if (enabled && user && user.role !== 'admin') {
+    // non-admin: kunci ke subdomain miliknya (tenant_id di tabel subscriptions = subdomain)
+    return { tid: user.tenant_subdomain, enforced: true }
+  }
+  return { tid: tenantId(c), enforced: false }
+}
+
+// ownership check row langganan/upsell utk non-admin (403 jujur bila bukan miliknya)
+function ownsRow(sc: { tid: string | null; enforced: boolean }, rowTenantId: string | null): boolean {
+  if (!sc.enforced) return true
+  return Boolean(rowTenantId && sc.tid && rowTenantId === sc.tid)
 }
 
 // Upsell ladder (expand path kanonik B5-03): retain → expand high-ticket.
@@ -54,7 +75,9 @@ subs.post('/subscribe', async (c) => {
   const t = now()
   const qty = Math.max(1, parseInt(b.qty || '1', 10) || 1)
   const id = uid('sub_')
-  const tid = b.tenant_id || tenantId(c)
+  // BKF-16: non-admin TIDAK bisa menanam langganan atas nama tenant lain via body
+  const sc = scope(c)
+  const tid = sc.enforced ? sc.tid : (b.tenant_id || tenantId(c))
   const nextCharge = t + MONTH
 
   await c.env.DB.prepare(
@@ -91,7 +114,7 @@ subs.post('/subscribe', async (c) => {
 
 // ── GET / — daftar langganan (+ MRR ringkas) ───────────────────────
 subs.get('/', async (c) => {
-  const tid = tenantId(c)
+  const { tid } = scope(c)
   const q = tid
     ? c.env.DB.prepare('SELECT * FROM subscriptions WHERE tenant_id=? ORDER BY created_at DESC').bind(tid)
     : c.env.DB.prepare('SELECT * FROM subscriptions ORDER BY created_at DESC LIMIT 50')
@@ -115,6 +138,11 @@ subs.post('/:id/cancel', async (c) => {
   const b = await c.req.json<any>().catch(() => ({}))
   const sub = await c.env.DB.prepare('SELECT * FROM subscriptions WHERE id=?').bind(id).first<any>()
   if (!sub) return c.json({ error: 'subscription tidak ditemukan' }, 404)
+  // BKF-16: ownership — non-admin hanya boleh cancel langganan tenant miliknya
+  const sc = scope(c)
+  if (!ownsRow(sc, sub.tenant_id)) {
+    return c.json({ error: 'forbidden', message: 'Langganan ini bukan milik tenant-mu.' }, 403)
+  }
   if (sub.status === 'cancelled') return c.json({ error: 'sudah cancelled (idempotent)' }, 409)
 
   const t = now()
@@ -137,10 +165,14 @@ subs.post('/:id/cancel', async (c) => {
 // ── GET /reminders — daftar reminder (filter status/due) ───────────
 subs.get('/reminders', async (c) => {
   const status = c.req.query('status')
-  const q = status
-    ? c.env.DB.prepare('SELECT * FROM reminders WHERE status=? ORDER BY due_at ASC LIMIT 100').bind(status)
-    : c.env.DB.prepare('SELECT * FROM reminders ORDER BY due_at ASC LIMIT 100')
-  const { results } = await q.all<any>()
+  // BKF-16: scope reminder per-tenant (non-admin tidak lihat reminder tenant lain)
+  const { tid } = scope(c)
+  let sql = 'SELECT * FROM reminders WHERE 1=1'
+  const binds: any[] = []
+  if (tid) { sql += ' AND tenant_id=?'; binds.push(tid) }
+  if (status) { sql += ' AND status=?'; binds.push(status) }
+  sql += ' ORDER BY due_at ASC LIMIT 100'
+  const { results } = await c.env.DB.prepare(sql).bind(...binds).all<any>()
   const t = now()
   const due_now = (results || []).filter((r) => r.status === 'scheduled' && r.due_at <= t).length
   return c.json({ reminders: results || [], due_now })
@@ -150,9 +182,12 @@ subs.get('/reminders', async (c) => {
 // Deterministik. Pengiriman WA nyata via Fonnte dilakukan terpisah (lib/fonnte).
 subs.post('/reminders/run', async (c) => {
   const t = now()
-  const { results } = await c.env.DB.prepare(
-    "SELECT * FROM reminders WHERE status='scheduled' AND due_at<=? ORDER BY due_at ASC LIMIT 100"
-  ).bind(t).all<any>()
+  // BKF-16: non-admin hanya memproses reminder tenant miliknya sendiri
+  const { tid } = scope(c)
+  const { results } = await (tid
+    ? c.env.DB.prepare("SELECT * FROM reminders WHERE status='scheduled' AND due_at<=? AND tenant_id=? ORDER BY due_at ASC LIMIT 100").bind(t, tid)
+    : c.env.DB.prepare("SELECT * FROM reminders WHERE status='scheduled' AND due_at<=? ORDER BY due_at ASC LIMIT 100").bind(t)
+  ).all<any>()
   let sent = 0
   for (const r of results || []) {
     await c.env.DB.prepare('UPDATE reminders SET status=?, sent_at=?, updated_at=? WHERE id=?')
@@ -165,7 +200,7 @@ subs.post('/reminders/run', async (c) => {
 // ── GET /upsell — rekomendasi expand high-ticket (next-best-action) ─
 // Berbasis langganan aktif → ladder deterministik. Idempotent: tidak duplikat suggested.
 subs.get('/upsell', async (c) => {
-  const tid = tenantId(c)
+  const { tid } = scope(c)
   const q = tid
     ? c.env.DB.prepare("SELECT * FROM subscriptions WHERE tenant_id=? AND status='active' ORDER BY amount_cents DESC").bind(tid)
     : c.env.DB.prepare("SELECT * FROM subscriptions WHERE status='active' ORDER BY amount_cents DESC LIMIT 50")
@@ -215,6 +250,11 @@ subs.post('/upsell/:id/respond', async (c) => {
   }
   const ev = await c.env.DB.prepare('SELECT * FROM upsell_events WHERE id=?').bind(id).first<any>()
   if (!ev) return c.json({ error: 'upsell event tidak ditemukan' }, 404)
+  // BKF-16: ownership — non-admin hanya boleh respond upsell tenant miliknya
+  const sc = scope(c)
+  if (!ownsRow(sc, ev.tenant_id)) {
+    return c.json({ error: 'forbidden', message: 'Upsell event ini bukan milik tenant-mu.' }, 403)
+  }
 
   const t = now()
   await c.env.DB.prepare('UPDATE upsell_events SET status=?, responded_at=?, updated_at=? WHERE id=?')
@@ -232,23 +272,22 @@ subs.post('/upsell/:id/respond', async (c) => {
 
 // ── GET /telemetry — MRR, active, churn, upsell-accept, reminders due ─
 subs.get('/telemetry', async (c) => {
-  const sAgg = await c.env.DB.prepare(
-    `SELECT COUNT(*) total,
-            SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active,
-            SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) cancelled,
-            COALESCE(SUM(CASE WHEN status='active' THEN amount_cents*qty ELSE 0 END),0) mrr_cents
-     FROM subscriptions`
+  // BKF-16: telemetry di-scope per-tenant utk non-admin (tanpa scope → angka global, admin/dev only)
+  const { tid } = scope(c)
+  const W = tid ? ' WHERE tenant_id=?' : ''
+  const sAgg = await (tid
+    ? c.env.DB.prepare(`SELECT COUNT(*) total, SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active, SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) cancelled, COALESCE(SUM(CASE WHEN status='active' THEN amount_cents*qty ELSE 0 END),0) mrr_cents FROM subscriptions${W}`).bind(tid)
+    : c.env.DB.prepare(`SELECT COUNT(*) total, SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active, SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) cancelled, COALESCE(SUM(CASE WHEN status='active' THEN amount_cents*qty ELSE 0 END),0) mrr_cents FROM subscriptions`)
   ).first<any>()
-  const uAgg = await c.env.DB.prepare(
-    `SELECT COUNT(*) total,
-            SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted,
-            SUM(CASE WHEN status='declined' THEN 1 ELSE 0 END) declined
-     FROM upsell_events`
+  const uAgg = await (tid
+    ? c.env.DB.prepare(`SELECT COUNT(*) total, SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted, SUM(CASE WHEN status='declined' THEN 1 ELSE 0 END) declined FROM upsell_events${W}`).bind(tid)
+    : c.env.DB.prepare(`SELECT COUNT(*) total, SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) accepted, SUM(CASE WHEN status='declined' THEN 1 ELSE 0 END) declined FROM upsell_events`)
   ).first<any>()
   const t = now()
-  const rDue = await c.env.DB.prepare(
-    "SELECT COUNT(*) due FROM reminders WHERE status='scheduled' AND due_at<=?"
-  ).bind(t).first<any>()
+  const rDue = await (tid
+    ? c.env.DB.prepare("SELECT COUNT(*) due FROM reminders WHERE status='scheduled' AND due_at<=? AND tenant_id=?").bind(t, tid)
+    : c.env.DB.prepare("SELECT COUNT(*) due FROM reminders WHERE status='scheduled' AND due_at<=?").bind(t)
+  ).first<any>()
 
   const total = sAgg.total || 0
   const churnRate = total ? Math.round((sAgg.cancelled / total) * 100) : 0

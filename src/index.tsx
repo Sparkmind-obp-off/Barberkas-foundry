@@ -44,9 +44,12 @@ app.route('/api/v1/retention', retention)
 
 // Inbound webhooks (Fonnte WA — Booking Curator real). Public, no subdomain.
 // KECUALI endpoint dashboard (simulate/wa-log/conversations) — digerbang auth (BKF-14).
+// BKF-16: /fonnte/test-send juga digerbang — kirim WA nyata pakai token kita,
+// tidak boleh bisa dipicu anonim (spam/abuse + kuota Fonnte terbakar).
 app.use('/webhooks/simulate', authMiddleware, tenantParamGuard)
 app.use('/webhooks/wa-log', authMiddleware, tenantParamGuard)
 app.use('/webhooks/conversations', authMiddleware, tenantParamGuard)
+app.use('/webhooks/fonnte/test-send', authMiddleware, tenantParamGuard)
 app.route('/webhooks', webhooks)
 
 // Pages

@@ -145,6 +145,42 @@ export function dashboardPage(): string {
     </div>
     <div id="reminders-list" class="list"><div class="loading">Memuat…</div></div>
   </section>
+
+  <!-- ADMIN (BKF-16 — operator BarberKas: self-service tenant onboarding) -->
+  <section class="tab-panel hidden" id="tab-admin">
+    <div class="panel-head">
+      <h2 class="panel-title">Admin — Onboarding Tenant</h2>
+    </div>
+    <p class="section-sub" style="margin-bottom:var(--space-4)">Buat barbershop baru <strong>tanpa SQL migration manual</strong>: 1 form → tenant + layanan default + capster + mapping owner email (langsung bisa login Google).</p>
+    <form id="onboard-form" class="card" style="padding:var(--space-4);display:flex;flex-direction:column;gap:8px">
+      <label class="label">Subdomain (huruf kecil/angka/dash, 3-30 char)</label>
+      <input class="input" id="ob-subdomain" placeholder="cth: cutoclock" autocomplete="off">
+      <label class="label">Nama Barbershop</label>
+      <input class="input" id="ob-shop" placeholder="cth: Cut O'Clock Barbershop">
+      <label class="label">No. WA Owner</label>
+      <input class="input" id="ob-phone" placeholder="628…">
+      <label class="label">Email Owner (untuk login Google — opsional)</label>
+      <input class="input" id="ob-email" placeholder="owner@gmail.com">
+      <label class="label">Capsters awal (pisah koma — opsional)</label>
+      <input class="input" id="ob-capsters" placeholder="cth: Agus, Budi">
+      <label class="label">Tier</label>
+      <select class="input" id="ob-tier"><option value="starter">Starter</option><option value="free">Free</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option></select>
+      <label class="label">Trial (hari)</label>
+      <input class="input" id="ob-trial" type="number" value="14" min="0" max="90">
+      <button type="submit" class="btn btn-primary" id="ob-submit">Buat Tenant</button>
+      <div id="ob-result" class="muted" style="font-size:.8rem"></div>
+    </form>
+    <h3 class="sub-title">Daftar Tenant</h3>
+    <div id="admin-tenant-list" class="list"><div class="loading">Memuat…</div></div>
+    <h3 class="sub-title">Map Email → Tenant</h3>
+    <form id="map-form" class="card" style="padding:var(--space-4);display:flex;flex-direction:column;gap:8px">
+      <input class="input" id="mp-email" placeholder="email user">
+      <input class="input" id="mp-tenant" placeholder="subdomain tenant">
+      <select class="input" id="mp-role"><option value="owner">owner</option><option value="staff">staff</option><option value="admin">admin</option></select>
+      <button type="submit" class="btn btn-secondary btn-sm">Map</button>
+      <div id="mp-result" class="muted" style="font-size:.8rem"></div>
+    </form>
+  </section>
 </main>
 
 <nav class="bottom-nav">
@@ -155,6 +191,7 @@ export function dashboardPage(): string {
   <button class="nav-item" data-tab="subs"><span class="nav-ico">💳</span><span>Langganan</span></button>
   <button class="nav-item" data-tab="book"><span class="nav-ico">📅</span><span>Booking</span></button>
   <button class="nav-item" data-tab="wa"><span class="nav-ico">💬</span><span>WA</span></button>
+  <button class="nav-item hidden" data-tab="admin" id="nav-admin"><span class="nav-ico">🛠️</span><span>Admin</span></button>
 </nav>
 
 <!-- New Transaction Modal -->

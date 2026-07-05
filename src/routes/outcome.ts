@@ -5,6 +5,7 @@
 import { Hono } from 'hono'
 import type { Bindings, TenantContext } from '../types'
 import { tenantMiddleware } from '../middleware/tenant'
+import { authMiddleware, requireAdmin } from '../middleware/auth'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, TIER_LABEL, findSKU, classifyOutcome } from '../data/skus'
 import { estimatePrice } from '../data/verticals'
@@ -15,6 +16,17 @@ import { generateReceiptPDF } from '../lib/pdf'
 
 type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
 const outcome = new Hono<Env>()
+
+// ── BKF-16: admin-gate endpoint global (lintas tenant) ────────────
+// Lubang lama: /orders (list semua order), /orders/:id (detail), /orders/:id/proof
+// (tandai delivered), /telemetry/delivery — public tanpa auth. Sekarang: hanya
+// admin (operator BarberKas). Auth off → mode dev terbuka (jujur via /auth/config).
+// CATATAN: /orders/:id/status (polling bayar) & /orders/:id/receipt (faktur) TIDAK
+// digerbang — capability URL ber-ID acak (uid) yang dipegang pembeli sendiri.
+outcome.use('/orders', authMiddleware as any, requireAdmin as any)          // GET list
+outcome.use('/orders/:id', authMiddleware as any, requireAdmin as any)      // GET detail
+outcome.use('/orders/:id/proof', authMiddleware as any, requireAdmin as any) // POST proof gate
+outcome.use('/telemetry/delivery', authMiddleware as any, requireAdmin as any)
 
 // ── Config — beri tahu frontend apakah Duitku Pop live + URL JS ───
 outcome.get('/config', (c) => {
