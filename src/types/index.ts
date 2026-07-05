@@ -11,6 +11,23 @@ export type Bindings = {
   DUITKU_MERCHANT_KEY?: string    // API key (rahasia — wrangler secret put)
   DUITKU_ENV?: 'sandbox' | 'production'
   JWT_SECRET?: string
+  // BKF-14 — Clerk.com auth:
+  CLERK_SECRET_KEY?: string        // sk_test_… / sk_live_… (wrangler secret put)
+  CLERK_PUBLISHABLE_KEY?: string   // pk_test_… (boleh public — dikirim ke frontend)
+  CLERK_ISSUER?: string            // https://<instance>.clerk.accounts.dev
+  ADMIN_EMAILS?: string            // csv email operator BarberKas (auto role=admin saat login pertama)
+  DEV_AUTH_BYPASS_EMAIL?: string   // HANYA .dev.vars lokal — bypass login utk test E2E. JANGAN set di prod.
+}
+
+// BKF-14 — user login (Clerk) → tenant mapping
+export interface AuthUser {
+  id: string
+  clerk_user_id: string | null
+  email: string
+  name: string | null
+  tenant_id: string | null
+  tenant_subdomain: string | null   // join dari tenants (null = belum di-map)
+  role: 'owner' | 'staff' | 'admin' // admin = operator BarberKas, boleh lintas tenant
 }
 
 export type Tier = 'free' | 'starter' | 'pro' | 'enterprise'

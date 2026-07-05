@@ -4,8 +4,23 @@
 const _urlTenant = new URLSearchParams(location.search).get('tenant');
 if (_urlTenant) localStorage.setItem('bk_tenant', _urlTenant);
 let TENANT = _urlTenant || localStorage.getItem('bk_tenant') || 'alfacut';
-const api = (path, opts = {}) =>
-  fetch(`/api/v1${path}`, { headers: { 'x-tenant': TENANT, 'Content-Type': 'application/json' }, ...opts })
+
+// ── BKF-14: Auth Clerk ──
+// AUTH.enabled dari GET /api/v1/auth/config. Bila aktif → semua fetch bawa
+// Bearer token Clerk (fresh per-request, token session pendek umurnya).
+const AUTH = { enabled: false, user: null, clerk: null };
+async function authToken() {
+  if (!AUTH.enabled || !AUTH.clerk || !AUTH.clerk.session) return null;
+  try { return await AUTH.clerk.session.getToken(); } catch { return null; }
+}
+async function authHeaders(extra = {}) {
+  const h = { 'Content-Type': 'application/json', ...extra };
+  const tok = await authToken();
+  if (tok) h['Authorization'] = `Bearer ${tok}`;
+  return h;
+}
+const api = async (path, opts = {}) =>
+  fetch(`/api/v1${path}`, { ...opts, headers: await authHeaders({ 'x-tenant': TENANT, ...(opts.headers || {}) }) })
     .then((r) => r.json());
 
 const $ = (id) => document.getElementById(id);
@@ -305,8 +320,8 @@ $('intake-submit').addEventListener('click', async () => {
 });
 
 // ── R4: Langganan (retain & expand) ──
-const sapi = (path, opts = {}) =>
-  fetch(`/api/v1/subscriptions${path}`, { headers: { 'x-tenant': TENANT, 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
+const sapi = async (path, opts = {}) =>
+  fetch(`/api/v1/subscriptions${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { ...opts, headers: await authHeaders({ 'x-tenant': TENANT, ...(opts.headers || {}) }) }).then((r) => r.json());
 
 async function loadSubs() {
   // telemetry
@@ -391,10 +406,10 @@ $('btn-run-reminders').addEventListener('click', async () => {
 });
 
 // ── BKF-13: AI Resepsionis WA — simulator FSM + retensi ──
-const wapi = (path, opts = {}) =>
-  fetch(`/webhooks${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { headers: { 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
-const rapi = (path, opts = {}) =>
-  fetch(`/api/v1/retention${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { headers: { 'Content-Type': 'application/json' }, ...opts }).then((r) => r.json());
+const wapi = async (path, opts = {}) =>
+  fetch(`/webhooks${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { ...opts, headers: await authHeaders(opts.headers || {}) }).then((r) => r.json());
+const rapi = async (path, opts = {}) =>
+  fetch(`/api/v1/retention${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { ...opts, headers: await authHeaders(opts.headers || {}) }).then((r) => r.json());
 
 function waBubble(text, dir) {
   const isOut = dir === 'out';
@@ -473,5 +488,88 @@ function loadTab(tab) {
   ({ home: loadHome, tx: loadTx, ai: loadAi, cust: loadCust, book: loadBook, outcome: loadOutcome, subs: loadSubs, wa: loadWa }[tab] || (() => {}))();
 }
 
+// ── BKF-14: Boot auth → baru load dashboard ──
+// 1) /auth/config public: auth aktif? publishable key?
+// 2) aktif → muat Clerk JS dari CDN instance, mount SignIn bila belum login
+// 3) login OK → /auth/me → kunci TENANT ke tenant milik user (non-admin)
+function showAuthOverlay(show, msg) {
+  const ov = $('auth-overlay');
+  if (ov) ov.classList.toggle('hidden', !show);
+  if (msg && $('auth-status')) $('auth-status').textContent = msg;
+}
+
+function clerkFrontendHost(pk) {
+  // pk_test_<base64(frontend-api)$> → host CDN clerk-js instance
+  try { return atob(pk.split('_').slice(2).join('_')).replace(/\$$/, ''); } catch { return null; }
+}
+
+async function initAuth() {
+  let cfg = { enabled: false };
+  try { cfg = await fetch('/api/v1/auth/config').then((r) => r.json()); } catch {}
+  AUTH.enabled = Boolean(cfg.enabled);
+
+  if (!AUTH.enabled) {
+    // auth off (dev terbuka / dev bypass) — langsung masuk
+    if (cfg.dev_bypass) console.info('[auth] dev bypass aktif');
+    return true;
+  }
+
+  const pk = cfg.publishable_key;
+  const host = pk && clerkFrontendHost(pk);
+  if (!pk || !host) { showAuthOverlay(true, 'Auth aktif tapi publishable key tidak tersedia — hubungi operator.'); return false; }
+
+  showAuthOverlay(true, 'Memuat login…');
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `https://${host}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`;
+    s.setAttribute('data-clerk-publishable-key', pk);
+    s.async = true; s.crossOrigin = 'anonymous';
+    s.onload = resolve; s.onerror = () => reject(new Error('gagal muat Clerk JS'));
+    document.head.appendChild(s);
+  }).catch((e) => { showAuthOverlay(true, '⚠️ ' + e.message); });
+
+  if (!window.Clerk) { showAuthOverlay(true, '⚠️ Clerk JS tidak tersedia.'); return false; }
+  AUTH.clerk = window.Clerk;
+  await AUTH.clerk.load();
+
+  if (!AUTH.clerk.user) {
+    // belum login → mount widget SignIn Clerk
+    showAuthOverlay(true, 'Silakan masuk.');
+    AUTH.clerk.mountSignIn(document.getElementById('clerk-signin'), { appearance: { baseTheme: undefined } });
+    AUTH.clerk.addListener(({ user }) => { if (user) location.reload(); });
+    return false;
+  }
+
+  // sudah login → ambil mapping tenant dari backend
+  const me = await fetch('/api/v1/auth/me', { headers: await authHeaders() }).then((r) => r.json()).catch(() => null);
+  if (!me || !me.authenticated) { showAuthOverlay(true, '⚠️ Sesi tidak valid — coba muat ulang.'); return false; }
+  AUTH.user = me.user;
+
+  if (me.user.role !== 'admin') {
+    if (!me.user.tenant_subdomain) {
+      showAuthOverlay(true, `Akun ${me.user.email} belum di-map ke barbershop manapun. Hubungi operator BarberKas.`);
+      const si = document.getElementById('clerk-signin');
+      if (si) si.innerHTML = '<button class="btn btn-secondary" onclick="AUTH.clerk.signOut().then(()=>location.reload())">Keluar</button>';
+      return false;
+    }
+    // kunci tenant ke milik user — sembunyikan switcher demo
+    TENANT = me.user.tenant_subdomain;
+    localStorage.setItem('bk_tenant', TENANT);
+    const sw = $('tenant-switch');
+    if (sw) {
+      sw.innerHTML = `<option value="${TENANT}">${TENANT}</option>`;
+      sw.value = TENANT; sw.disabled = true; sw.title = 'Tenant terkunci ke akunmu';
+    }
+  }
+
+  const so = $('btn-signout');
+  if (so) {
+    so.classList.remove('hidden');
+    so.addEventListener('click', () => AUTH.clerk.signOut().then(() => location.reload()));
+  }
+  showAuthOverlay(false);
+  return true;
+}
+
 // init
-loadHome();
+initAuth().then((ok) => { if (ok) loadHome(); });

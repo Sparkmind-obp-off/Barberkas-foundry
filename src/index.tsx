@@ -2,10 +2,12 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Bindings, TenantContext } from './types'
 import api from './routes/api'
+import auth from './routes/auth'
 import outcome from './routes/outcome'
 import subscriptions from './routes/subscriptions'
 import webhooks from './routes/webhooks'
 import retention from './routes/retention'
+import { authMiddleware, tenantParamGuard } from './middleware/auth'
 import { landingPage } from './pages/landing'
 import { dashboardPage } from './pages/dashboard'
 import { solutionsIndexPage, solutionPage } from './pages/solutions'
@@ -20,6 +22,9 @@ app.use('/api/*', cors())
 // Health
 app.get('/health', (c) => c.json({ ok: true, service: 'barberkas-aaas', layer: 'outcome-foundry' }))
 
+// BKF-14 — Auth Clerk.com: /config (public), /me, /map & /users (admin)
+app.route('/api/v1/auth', auth)
+
 // API — kasir/booking/agents (tenant-scoped)
 app.route('/api/v1', api)
 
@@ -29,12 +34,19 @@ app.route('/api/v1/outcome', outcome)
 
 // R4 — Retain & Expand: langganan (Care Plan/AI Staff) + reminder + upsell high-ticket.
 // Tenant opsional via ?tenant=/x-tenant; state nyata di D1 (Truth-Lock).
+// BKF-14: digerbang auth bila Clerk aktif (tenantParamGuard = isolasi per ?tenant=).
+app.use('/api/v1/subscriptions/*', authMiddleware, tenantParamGuard)
 app.route('/api/v1/subscriptions', subscriptions)
 
 // BKF-13 — Retensi customer: reminder H-1 booking + retensi 3-4 minggu + run-due Fonnte.
+app.use('/api/v1/retention/*', authMiddleware, tenantParamGuard)
 app.route('/api/v1/retention', retention)
 
 // Inbound webhooks (Fonnte WA — Booking Curator real). Public, no subdomain.
+// KECUALI endpoint dashboard (simulate/wa-log/conversations) — digerbang auth (BKF-14).
+app.use('/webhooks/simulate', authMiddleware, tenantParamGuard)
+app.use('/webhooks/wa-log', authMiddleware, tenantParamGuard)
+app.use('/webhooks/conversations', authMiddleware, tenantParamGuard)
 app.route('/webhooks', webhooks)
 
 // Pages

@@ -21,8 +21,19 @@ export function dashboardPage(): string {
       <option value="scissor7">Scissor7 (demo)</option>
     </select>
     <span id="tier-badge" class="badge badge-info">…</span>
+    <button class="btn btn-secondary btn-sm hidden" id="btn-signout" title="Keluar">Keluar</button>
   </div>
 </header>
+
+<!-- BKF-14 — Auth Clerk: overlay login (muncul hanya bila auth aktif & belum login) -->
+<div id="auth-overlay" class="hidden" style="position:fixed;inset:0;z-index:1000;background:rgba(7,12,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px">
+  <div style="text-align:center">
+    <div class="brand" style="font-size:1.4rem;justify-content:center"><span class="brand-mark">⛿</span> BarberKas</div>
+    <p class="muted" style="font-size:.85rem;margin-top:6px">Masuk untuk mengakses dashboard barbershop-mu.</p>
+  </div>
+  <div id="clerk-signin"></div>
+  <p id="auth-status" class="muted" style="font-size:.78rem">Memuat login…</p>
+</div>
 
 <main class="app-main container-app">
   <!-- HOME -->

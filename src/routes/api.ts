@@ -1,14 +1,18 @@
 // BarberKas AaaS — API v1 routes. All tenant-scoped.
 import { Hono } from 'hono'
-import type { Bindings, TenantContext } from '../types'
+import type { Bindings, TenantContext, AuthUser } from '../types'
 import { tenantMiddleware } from '../middleware/tenant'
+import { authMiddleware, requireTenantAccess } from '../middleware/auth'
 import { uid, now, parseIds, rupiah } from '../lib/d1'
 import { AGENT_REGISTRY, dispatchAgent } from '../agents'
 
-type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
+type Env = { Bindings: Bindings; Variables: { tenant: TenantContext; authUser: AuthUser | null } }
 
 const api = new Hono<Env>()
+// BKF-14 — urutan penting: auth (siapa kamu) → tenant (toko mana) → guard (boleh?)
+api.use('*', authMiddleware as any)
 api.use('*', tenantMiddleware)
+api.use('*', requireTenantAccess as any)
 
 // ── Tenant context / DoO status ───────────────────────────────
 api.get('/me', (c) => {

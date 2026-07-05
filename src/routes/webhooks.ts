@@ -17,18 +17,23 @@ import { runReceptionist } from '../agents/receptionist'
 
 const webhooks = new Hono<{ Bindings: Bindings }>()
 
-async function resolveTenant(c: any, deviceOrQuery?: string): Promise<Tenant | null> {
+// strict=true (simulator/dashboard): ?tenant= WAJIB valid — TIDAK ada fallback diam-diam.
+// Fix bug branding: dropdown "Cut O'Clock" tapi bot balas "AlfaCut" terjadi karena
+// fallback ke tenant pertama saat query tenant hilang/salah. Sekarang → 404 jujur.
+async function resolveTenant(c: any, deviceOrQuery?: string, strict = false): Promise<Tenant | null> {
   const q = c.req.query('tenant')
   if (q) {
     const row = await c.env.DB.prepare('SELECT * FROM tenants WHERE subdomain=?').bind(q).first<Tenant>()
     if (row) return row
+    if (strict) return null // tenant diminta tapi tidak ada → jangan fallback ke toko lain
   }
+  if (strict) return null // simulator wajib eksplisit sebutkan tenant
   if (deviceOrQuery) {
     const phone = normalizePhone(deviceOrQuery)
     const row = await c.env.DB.prepare('SELECT * FROM tenants WHERE owner_phone=?').bind(phone).first<Tenant>()
     if (row) return row
   }
-  // dev fallback — tenant pertama
+  // dev fallback — tenant pertama (hanya jalur Fonnte device, bukan simulator)
   return await c.env.DB.prepare('SELECT * FROM tenants ORDER BY created_at ASC LIMIT 1').first<Tenant>()
 }
 
@@ -97,18 +102,18 @@ webhooks.post('/fonnte', async (c) => {
 webhooks.post('/simulate', async (c) => {
   const b = await c.req.json<any>().catch(() => ({}))
   if (!b.phone || !b.message) return c.json({ ok: false, error: 'phone & message wajib' }, 400)
-  const tenant = await resolveTenant(c, undefined)
-  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  const tenant = await resolveTenant(c, undefined, true)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan — sertakan ?tenant=<subdomain> yang valid' }, 404)
   const phone = normalizePhone(String(b.phone))
   const out = await handleIncoming(c, tenant, phone, String(b.message), String(b.name || 'Simulasi'), true)
-  return c.json(out)
+  return c.json({ ...out, shop_name: tenant.shop_name })
 })
 
 // ── WA log — riwayat percakapan (dashboard) ─────────────────────
 // GET /webhooks/wa-log?tenant=alfacut&phone=628…&limit=50
 webhooks.get('/wa-log', async (c) => {
-  const tenant = await resolveTenant(c, undefined)
-  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  const tenant = await resolveTenant(c, undefined, true)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan — sertakan ?tenant=<subdomain> yang valid' }, 404)
   const phone = c.req.query('phone')
   const limit = Math.min(200, parseInt(c.req.query('limit') || '50', 10) || 50)
 
@@ -123,8 +128,8 @@ webhooks.get('/wa-log', async (c) => {
 
 // ── State percakapan aktif (debug/dashboard) ────────────────────
 webhooks.get('/conversations', async (c) => {
-  const tenant = await resolveTenant(c, undefined)
-  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  const tenant = await resolveTenant(c, undefined, true)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan — sertakan ?tenant=<subdomain> yang valid' }, 404)
   const { results } = await c.env.DB.prepare(
     'SELECT phone,state,context,expires_at,updated_at FROM wa_conversations WHERE tenant_id=? ORDER BY updated_at DESC LIMIT 50'
   ).bind(tenant.id).all<any>()
