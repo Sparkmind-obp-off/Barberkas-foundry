@@ -22,14 +22,20 @@ app.use('/api/*', cors())
 // Health
 app.get('/health', (c) => c.json({ ok: true, service: 'barberkas-aaas', layer: 'outcome-foundry' }))
 
-// BKF-14 — Auth Clerk.com: /config (public), /me, /map & /users (admin)
-app.route('/api/v1/auth', auth)
+// BUGFIX (BKF-17 server-side gating audit) — URUTAN MOUNT PENTING:
+// api (catch-all /api/v1/*) pasang authMiddleware via use('*') — kalau di-mount
+// duluan, middleware-nya nyangkut ke /api/v1/outcome/* juga → endpoint funnel
+// public (catalog/config/proofs/intake/price-estimate) balas 401 ke prospek
+// anonim (funnel patah di production saat Clerk live). Maka: sub-app yang punya
+// guard eksplisit sendiri di-mount DULU, catch-all api paling AKHIR.
 
-// API — kasir/booking/agents (tenant-scoped)
-app.route('/api/v1', api)
+// BKF-14 — Auth Clerk.com: /config (public), /me; /map /users /tenants (admin via requireAdmin)
+app.route('/api/v1/auth', auth)
 
 // Outcome Foundry pipeline (F0-F7): catalog/intake/checkout/pay/proof/orders
 // Public-safe: intake & catalog boleh diakses prospek (belum jadi tenant).
+// Endpoint sensitif (orders list/detail, proof, telemetry) digerbang requireAdmin
+// di dalam routes/outcome.ts sendiri.
 app.route('/api/v1/outcome', outcome)
 
 // R4 — Retain & Expand: langganan (Care Plan/AI Staff) + reminder + upsell high-ticket.
@@ -41,6 +47,10 @@ app.route('/api/v1/subscriptions', subscriptions)
 // BKF-13 — Retensi customer: reminder H-1 booking + retensi 3-4 minggu + run-due Fonnte.
 app.use('/api/v1/retention/*', authMiddleware, tenantParamGuard)
 app.route('/api/v1/retention', retention)
+
+// API — kasir/booking/agents (tenant-scoped penuh: auth → tenant → requireTenantAccess).
+// WAJIB paling akhir di antara /api/v1/* (lihat catatan urutan mount di atas).
+app.route('/api/v1', api)
 
 // Inbound webhooks (Fonnte WA — Booking Curator real). Public, no subdomain.
 // KECUALI endpoint dashboard (simulate/wa-log/conversations) — digerbang auth (BKF-14).

@@ -38,12 +38,12 @@ auth.get('/me', (c) => {
 })
 
 // admin-only helpers — operator BarberKas map email → tenant
-auth.use('/map', authMiddleware)
+// BUGFIX (BKF-17 audit server-side gating): dulu cek admin inline (duplikat logika,
+// rawan drift/kelupaan di endpoint baru). Sekarang SEMUA endpoint admin lewat
+// middleware requireAdmin yang sama → satu sumber kebenaran. Role diambil dari
+// DB via Clerk JWT terverifikasi server (bukan dari data kiriman client).
+auth.use('/map', authMiddleware, requireAdmin)
 auth.post('/map', async (c) => {
-  const u = c.get('authUser')
-  if (isClerkConfigured(c.env) || c.env.DEV_AUTH_BYPASS_EMAIL) {
-    if (!u || u.role !== 'admin') return c.json({ error: 'forbidden', message: 'Hanya admin (operator BarberKas).' }, 403)
-  }
   const b = await c.req.json<any>().catch(() => ({}))
   const email = String(b.email || '').trim().toLowerCase()
   const tenantSub = String(b.tenant || '').trim().toLowerCase()
@@ -65,12 +65,8 @@ auth.post('/map', async (c) => {
   return c.json({ ok: true, email, tenant: tenant.subdomain, shop_name: tenant.shop_name, role })
 })
 
-auth.use('/users', authMiddleware)
+auth.use('/users', authMiddleware, requireAdmin)
 auth.get('/users', async (c) => {
-  const u = c.get('authUser')
-  if (isClerkConfigured(c.env) || c.env.DEV_AUTH_BYPASS_EMAIL) {
-    if (!u || u.role !== 'admin') return c.json({ error: 'forbidden', message: 'Hanya admin.' }, 403)
-  }
   const { results } = await c.env.DB.prepare(
     `SELECT u.id, u.email, u.name, u.role, u.clerk_user_id, t.subdomain AS tenant, t.shop_name
      FROM users u LEFT JOIN tenants t ON t.id=u.tenant_id ORDER BY u.created_at ASC LIMIT 200`
