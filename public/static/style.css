@@ -170,7 +170,13 @@ a { color: var(--accent); text-decoration: none; }
 .stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: var(--space-3); }
 .stat { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--shadow-card); transition: border-color var(--transition-base), box-shadow var(--transition-base); }
 .stat:hover { border-color: rgba(74,144,226,.32); }
-.stat-label { font-size: .78rem; color: var(--text-muted); }
+.stat-label { font-size: .78rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+/* T1.5: ikon geometris minimalis pengganti emoji di chrome dashboard (nuansa premium-serius) */
+.stat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.stat-dot.d-accent { background: var(--accent); }
+.stat-dot.d-success { background: var(--success); }
+.stat-dot.d-warning { background: var(--warning); }
+.stat-dot.d-chrome { background: var(--chrome); }
 /* T1.4: angka statistik gaya dashboard finansial premium (ref: Stripe/Linear) — lebih tebal + tighter tracking + tabular */
 .stat-value { font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); margin-top: var(--space-1); letter-spacing: -.035em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .stat-value.accent { color: var(--accent); }
