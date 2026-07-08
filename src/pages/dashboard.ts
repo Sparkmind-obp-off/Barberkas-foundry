@@ -41,7 +41,7 @@ export function dashboardPage(): string {
     <h2 class="panel-title">Ringkasan Hari Ini</h2>
     <div class="stat-grid" id="stat-grid"><div class="loading">Memuat…</div></div>
     <div class="doo-badge" id="doo-badge"></div>
-    <h3 class="sub-title">Bukti AI Staff bekerja</h3>
+    <h3 class="sub-title">Bukti AI Staff bekerja <span class="count-badge" id="feed-count"></span></h3>
     <div id="agent-feed" class="feed"><div class="loading">Memuat…</div></div>
   </section>
 

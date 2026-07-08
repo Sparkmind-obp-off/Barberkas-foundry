@@ -166,14 +166,26 @@ $('tenant-switch').addEventListener('change', (e) => {
 async function loadHome() {
   const d = await api('/dashboard');
   $('tier-badge').textContent = (d.tier || '').toUpperCase();
+  // UI-polish P3: stat card = ikon + angka + sub-konteks (data sudah ada dari API, presentational saja)
+  const txPct = d.total.tx_count > 0 ? Math.min(100, Math.round((d.today.tx_count / Math.max(1, d.total.tx_count)) * 100)) : 0;
   $('stat-grid').innerHTML = `
-    <div class="stat"><div class="stat-label">Omzet Hari Ini</div><div class="stat-value accent">${d.today.revenue_fmt}</div></div>
-    <div class="stat"><div class="stat-label">Transaksi Hari Ini</div><div class="stat-value">${d.today.tx_count}</div></div>
-    <div class="stat"><div class="stat-label">Booking Aktif</div><div class="stat-value">${d.bookings_open}</div></div>
-    <div class="stat"><div class="stat-label">Customer</div><div class="stat-value">${d.customers}</div></div>`;
-  $('doo-badge').textContent = `✓ Outcome LIVE — ${d.shop_name}: ${d.total.tx_count} transaksi tercatat (${d.total.revenue_fmt}), ${d.agent_calls} AI call.`;
+    <div class="stat"><div class="stat-label">💵 Omzet Hari Ini</div><div class="stat-value accent">${d.today.revenue_fmt}</div><div class="stat-sub">total ${d.total.revenue_fmt}</div></div>
+    <div class="stat"><div class="stat-label">🧾 Transaksi Hari Ini</div><div class="stat-value">${d.today.tx_count}</div><div class="stat-sub">dari ${d.total.tx_count} total<div class="mini-bar"><span style="width:${txPct}%"></span></div></div></div>
+    <div class="stat"><div class="stat-label">📅 Booking Aktif</div><div class="stat-value">${d.bookings_open}</div><div class="stat-sub">${d.bookings_open > 0 ? 'perlu perhatian hari ini' : 'tidak ada antrean'}</div></div>
+    <div class="stat"><div class="stat-label">🤝 Customer</div><div class="stat-value">${d.customers}</div><div class="stat-sub">terdaftar di database</div></div>`;
+  // DoO banner terstruktur: badge LIVE menonjol + metrik dipisah jelas
+  $('doo-badge').innerHTML = `
+    <span class="doo-live">✓ OUTCOME LIVE</span>
+    <span class="doo-shop">${escapeHtml(d.shop_name || '')}</span>
+    <span class="doo-metrics">
+      <span class="doo-metric">🧾 ${d.total.tx_count} transaksi</span>
+      <span class="doo-metric">💰 ${d.total.revenue_fmt}</span>
+      <span class="doo-metric">✨ ${d.agent_calls} AI call</span>
+    </span>`;
 
   const { calls } = await api('/agent-calls');
+  const fc = $('feed-count');
+  if (fc) fc.textContent = calls.length ? `${calls.length} aktivitas` : '';
   $('agent-feed').innerHTML = calls.length
     ? calls.slice(0, 6).map((c) => {
         const h = humanizeAgentCall(c);
