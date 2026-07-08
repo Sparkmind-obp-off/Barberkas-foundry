@@ -27,6 +27,112 @@ const $ = (id) => document.getElementById(id);
 const rp = (cents) => 'Rp ' + Math.round(cents / 100).toLocaleString('id-ID');
 const fmtDate = (ms) => new Date(ms).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+// ── UI-polish P1: format timestamp manusiawi ("2 jam lalu", "27 Jun") ──
+function timeAgo(ms) {
+  const diffMin = Math.floor((Date.now() - ms) / 60000);
+  if (diffMin < 1) return 'baru saja';
+  if (diffMin < 60) return `${diffMin} menit lalu`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `${h} jam lalu`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} hari lalu`;
+  return new Date(ms).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+}
+
+// ── UI-polish P1: humanizer feed "Bukti AI Staff bekerja" ──
+// output_summary dari backend = JSON.stringify(output).slice(0,200) → sering
+// kepotong (invalid JSON). Parser ini: coba JSON.parse + tambal truncation,
+// fallback ekstraksi per-field. Murni presentational — data tetap dari API.
+function parseAgentSummary(raw) {
+  if (!raw) return {};
+  for (const fix of ['', '"}', '"]}', '}', ']}', '"}}']) {
+    try { const o = JSON.parse(raw + fix); if (o && typeof o === 'object') return o; } catch {}
+  }
+  const out = {};
+  const KEYS = ['booking_id', 'customer', 'status', 'confirmation_msg', 'recommendation', 'cut_name', 'style_desc', 'product', 'caption', 'content', 'strategy', 'monthly_tx', 'platform', 'message', 'error', 'coming_soon', 'empty', 'mode'];
+  for (const k of KEYS) {
+    const m = String(raw).match(new RegExp('"?' + k + '"?\\s*:\\s*"?([^"]+?)(?:"\\s*[,}]|$)'));
+    if (m) out[k] = m[1];
+  }
+  return out;
+}
+
+// Bersihkan artefak mentah: escape \n, backslash, kutip, kurung kurawal.
+function cleanAgentText(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\n/g, ' ')
+    .replace(/\\[rt]/g, ' ')
+    .replace(/\\+/g, '')
+    .replace(/[{}"]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    // fragmen buntung sisa truncation backend (cth "…AlfaCut: T") → ellipsis
+    .replace(/[:;,]\s*\S{1,2}$/, '…');
+}
+
+// Potong ke 1-2 kalimat pertama biar gak kepanjangan di feed.
+function firstSentences(s, max = 130) {
+  const t = cleanAgentText(s);
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const dot = cut.lastIndexOf('. ');
+  return dot > 40 ? cut.slice(0, dot + 1) : cut.replace(/\S*$/, '').trimEnd() + '…';
+}
+
+const AGENT_FEED_META = {
+  stylist: ['💇', 'AI Stylist'],
+  content: ['📸', 'AI Marketing'],
+  booking: ['📅', 'AI Resepsionis'],
+  trend: ['🔥', 'AI Trend'],
+  pricing: ['💰', 'AI Pricing'],
+  inventory: ['📦', 'AI Inventory'],
+  customer: ['🤝', 'AI CRM'],
+  capster_perf: ['📊', 'AI Analitik'],
+  multi_tenant: ['🏢', 'AI Multi-Cabang'],
+};
+const STATUS_ID = { pending: 'menunggu konfirmasi', confirmed: 'terkonfirmasi', completed: 'selesai', cancelled: 'dibatalkan', success: 'berhasil', fail: 'gagal' };
+
+// Ubah 1 record agent_calls → kalimat manusiawi per tipe agent.
+function humanizeAgentCall(c) {
+  const o = parseAgentSummary(c.output_summary || '');
+  const [icon, label] = AGENT_FEED_META[c.agent_type] || ['✨', 'AI Staff'];
+  let text;
+  if (o.error) {
+    text = `Panggilan tidak berhasil — sudah dicatat untuk perbaikan.`;
+  } else if (o.coming_soon) {
+    text = 'Agent ini masih tahap roadmap — segera hadir.';
+  } else if (String(o.empty) === 'true' && c.agent_type === 'inventory') {
+    text = 'Belum ada produk terdaftar — tambahkan lewat menu Produk.';
+  } else switch (c.agent_type) {
+    case 'stylist':
+      text = o.recommendation
+        ? `Kasih rekomendasi: ${firstSentences(o.recommendation)}`
+        : o.cut_name
+          ? `Rekomendasi gaya: ${cleanAgentText(o.cut_name)}${o.style_desc ? ' — ' + firstSentences(o.style_desc, 100) : ''}`
+          : 'Rekomendasi gaya rambut dibuat.';
+      break;
+    case 'booking':
+      text = `Booking baru dari ${cleanAgentText(o.customer) || 'customer'} — status: ${STATUS_ID[o.status] || cleanAgentText(o.status) || 'tercatat'}.`;
+      break;
+    case 'content':
+      text = o.caption || o.content
+        ? `Konten ${cleanAgentText(o.platform) || 'sosmed'} siap posting: ${firstSentences(o.caption || o.content)}`
+        : 'Konten promosi dibuat.';
+      break;
+    case 'pricing':
+      text = o.strategy
+        ? `Kasih saran strategi harga: ${firstSentences(o.strategy)}`
+        : 'Analisis strategi harga dijalankan.';
+      break;
+    case 'inventory':
+      text = o.message ? firstSentences(o.message) : 'Pengecekan stok dijalankan.';
+      break;
+    default:
+      text = o.message ? firstSentences(o.message) : 'Aktivitas AI tercatat.';
+  }
+  return { icon, label, text };
+}
+
 // ── Tab navigation ──
 document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -60,9 +166,12 @@ async function loadHome() {
 
   const { calls } = await api('/agent-calls');
   $('agent-feed').innerHTML = calls.length
-    ? calls.slice(0, 6).map((c) => `
-      <div class="feed-item"><span class="fi-type">${c.agent_type}</span> · ${fmtDate(c.created_at)}<br>
-      <span class="muted">${c.output_summary ? c.output_summary.replace(/[{}"]/g, '').slice(0, 90) : '—'}</span></div>`).join('')
+    ? calls.slice(0, 6).map((c) => {
+        const h = humanizeAgentCall(c);
+        return `
+      <div class="feed-item"><span class="fi-ico">${h.icon}</span><span class="fi-type">${h.label}</span> <span class="fi-time">· ${timeAgo(c.created_at)}</span><br>
+      <span class="fi-text">${escapeHtml(h.text)}</span></div>`;
+      }).join('')
     : '<div class="loading">Belum ada aktivitas AI. Coba panggil agent di tab AI.</div>';
 }
 
