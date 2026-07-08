@@ -14,6 +14,8 @@ import type { Bindings, Tenant } from '../types'
 import { uid, now } from '../lib/d1'
 import { parseFonnteWebhook, fonnteSend, normalizePhone } from '../lib/fonnte'
 import { runReceptionist } from '../agents/receptionist'
+import { isClerkConfigured } from '../lib/clerk'
+import { logSecurityEvent } from '../lib/audit'
 
 const webhooks = new Hono<{ Bindings: Bindings }>()
 
@@ -33,7 +35,18 @@ async function resolveTenant(c: any, deviceOrQuery?: string, strict = false): Pr
     const row = await c.env.DB.prepare('SELECT * FROM tenants WHERE owner_phone=?').bind(phone).first<Tenant>()
     if (row) return row
   }
-  // dev fallback — tenant pertama (hanya jalur Fonnte device, bukan simulator)
+  // BKF-18 (audit WRITE): fallback "tenant pertama" HANYA di mode dev (auth off).
+  // Di production (Clerk aktif), payload webhook yang tenant-nya tak teridentifikasi
+  // TIDAK boleh diam-diam nulis customer/booking ke tenant #1 → 404 jujur + audit log.
+  if (isClerkConfigured(c.env)) {
+    await logSecurityEvent(c.env, {
+      user: null, requested_tenant: q || deviceOrQuery || null, actual_tenant: null,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'webhook fonnte: tenant tak teridentifikasi — fallback tenant pertama DIBLOKIR (production)',
+    })
+    return null
+  }
+  // dev fallback — tenant pertama (hanya jalur Fonnte device, bukan simulator, auth off)
   return await c.env.DB.prepare('SELECT * FROM tenants ORDER BY created_at ASC LIMIT 1').first<Tenant>()
 }
 
@@ -137,11 +150,20 @@ webhooks.get('/conversations', async (c) => {
 })
 
 // ── Test helper: kirim WA manual (tenant-scoped via ?tenant=) ───
+// BKF-18: wajib resolve tenant valid (strict) + pesan keluar DICATAT ke
+// wa_messages tenant ybs — supaya kiriman manual punya jejak audit, tidak
+// "lepas" tanpa tenant. Gerbang auth+tenantParamGuard sudah dipasang di index.
 webhooks.post('/fonnte/test-send', async (c) => {
   const b = await c.req.json<any>().catch(() => ({}))
   if (!b.target || !b.message) return c.json({ error: 'target & message wajib' }, 400)
+  const tenant = await resolveTenant(c, undefined, true)
+  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan — sertakan ?tenant=<subdomain> yang valid' }, 404)
   const sent = await fonnteSend(c.env, b.target, b.message)
-  return c.json(sent)
+  await c.env.DB.prepare(
+    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(uid('wa_'), tenant.id, 'out', normalizePhone(String(b.target)), String(b.message), 'manual',
+    sent.ok ? 'sent' : (sent as any).mode === 'stub' ? 'stub' : 'failed', (sent as any).id || null, now()).run()
+  return c.json({ ...sent, tenant: tenant.subdomain })
 })
 
 export default webhooks
