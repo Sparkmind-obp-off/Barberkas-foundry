@@ -12,12 +12,14 @@
 // reminder ditandai 'stub' (jujur, tidak pura-pura terkirim).
 
 import { Hono } from 'hono'
-import type { Bindings, TenantContext } from '../types'
+import type { Bindings, TenantContext, AuthUser } from '../types'
 import { uid, now } from '../lib/d1'
 import { fonnteSend } from '../lib/fonnte'
 import { fmtWibFull } from '../lib/slots'
+import { isClerkConfigured } from '../lib/clerk'
+import { logSecurityEvent } from '../lib/audit'
 
-type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
+type Env = { Bindings: Bindings; Variables: { tenant: TenantContext; authUser: AuthUser | null } }
 const retention = new Hono<Env>()
 
 const DAY = 86_400_000
@@ -26,7 +28,29 @@ function tenantIdOf(c: any): string | null {
   return c.req.query('tenant_id') || c.req.header('x-tenant-id') || null
 }
 
+// BKF-18 (audit WRITE): utk user login non-admin, tenant SELALU dipaksa dari
+// sesi server (users.tenant_id) — param ?tenant=/?tenant_id=/header dari client
+// TIDAK dipercaya. tenantParamGuard sudah menolak ?tenant= yang mismatch, tapi
+// jalur ?tenant_id=/x-tenant-id lama tidak tercakup guard → ditutup di sini.
 async function resolveTenantRow(c: any): Promise<any | null> {
+  const enabled = isClerkConfigured(c.env) || Boolean(c.env.DEV_AUTH_BYPASS_EMAIL)
+  const user = c.get('authUser') as AuthUser | null
+  if (enabled && user && user.role !== 'admin') {
+    // non-admin → kunci ke tenant sesi, apa pun isi query/header client.
+    if (!user.tenant_id) return null
+    const own = await c.env.DB.prepare('SELECT * FROM tenants WHERE id=?').bind(user.tenant_id).first()
+    // deteksi & catat percobaan menyisipkan tenant lain via tenant_id/header lama
+    const reqTid = tenantIdOf(c)
+    if (own && reqTid && reqTid !== (own as any).id) {
+      await logSecurityEvent(c.env, {
+        user, requested_tenant: reqTid, actual_tenant: (own as any).subdomain,
+        endpoint: new URL(c.req.url).pathname, method: c.req.method,
+        action: 'forced_to_session', reason: 'retention: ?tenant_id= client != tenant sesi → dipaksa ke tenant sesi',
+      })
+    }
+    return own
+  }
+  // admin / auth off (dev) → boleh pilih tenant via param (jalur lama)
   const sub = c.req.query('tenant') || c.req.header('x-tenant')
   if (sub) {
     const row = await c.env.DB.prepare('SELECT * FROM tenants WHERE subdomain=?').bind(sub).first()
