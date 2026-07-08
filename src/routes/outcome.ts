@@ -3,9 +3,10 @@
 // Tenant-scoped where relevant; intake boleh dari prospek (belum jadi tenant).
 
 import { Hono } from 'hono'
-import type { Bindings, TenantContext } from '../types'
+import type { Bindings, TenantContext, AuthUser } from '../types'
 import { tenantMiddleware } from '../middleware/tenant'
-import { authMiddleware, requireAdmin } from '../middleware/auth'
+import { authMiddleware, requireAdmin, optionalAuthMiddleware } from '../middleware/auth'
+import { logSecurityEvent } from '../lib/audit'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, TIER_LABEL, findSKU, classifyOutcome } from '../data/skus'
 import { estimatePrice } from '../data/verticals'
@@ -14,8 +15,58 @@ import { morCharge, morFee, DISCLOSURE } from '../lib/mor'
 import { duitkuConfig, verifyCallback } from '../lib/duitku'
 import { generateReceiptPDF } from '../lib/pdf'
 
-type Env = { Bindings: Bindings; Variables: { tenant: TenantContext } }
+type Env = { Bindings: Bindings; Variables: { tenant: TenantContext; authUser: AuthUser | null } }
 const outcome = new Hono<Env>()
+
+// ── BKF-18 (audit WRITE): tenant_id utk intake/checkout TIDAK boleh dipercaya
+// mentah dari body client. Kebijakan:
+//   • anonim (prospek funnel) → boleh tanpa tenant (b.tenant_id diabaikan bila
+//     tidak valid; funnel tetap public — tidak ada 401).
+//   • user login non-admin → tenant SELALU dipaksa dari sesi server. Bila body
+//     menyisipkan tenant_id LAIN → 403 + tercatat di security_audit_log.
+//   • admin → bebas (operator BarberKas boleh buat order atas nama tenant).
+outcome.use('/intake', optionalAuthMiddleware as any)
+outcome.use('/checkout', optionalAuthMiddleware as any)
+
+// resolve tenant_id tepercaya utk jalur funnel write. return { tid, reject }
+async function trustedTenantId(c: any, bodyTenantId: string | null | undefined): Promise<{ tid: string | null; reject?: Response }> {
+  const user = c.get('authUser') as AuthUser | null
+  const requested = bodyTenantId || null
+
+  // anonim / auth off → pakai body apa adanya, TAPI validasi eksistensi bila diisi
+  // (mencegah nanam row dengan tenant_id ngawur; NULL tetap sah utk prospek).
+  if (!user || user.role === 'admin') {
+    if (requested) {
+      const ok = await c.env.DB.prepare('SELECT id FROM tenants WHERE id=?').bind(requested).first()
+      if (!ok) return { tid: null } // tenant tidak dikenal → perlakukan sbg prospek tanpa tenant
+    }
+    return { tid: requested }
+  }
+
+  // user login non-admin → tenant WAJIB dari sesi server
+  const sessionTid = user.tenant_id || null
+  if (requested && sessionTid && requested !== sessionTid) {
+    await logSecurityEvent(c.env, {
+      user, requested_tenant: requested, actual_tenant: sessionTid,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'body.tenant_id != tenant sesi (percobaan tulis atas nama tenant lain)',
+    })
+    return {
+      tid: sessionTid,
+      reject: c.json({ error: 'forbidden', message: `tenant_id di body tidak sesuai dengan tenant akunmu.` }, 403),
+    }
+  }
+  if (requested && !sessionTid) {
+    // user login tapi belum di-map → jangan biarkan menanam atas nama tenant manapun
+    await logSecurityEvent(c.env, {
+      user, requested_tenant: requested, actual_tenant: null,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'forced_to_session', reason: 'user belum di-map ke tenant → tenant_id body diabaikan (di-null-kan)',
+    })
+    return { tid: null }
+  }
+  return { tid: sessionTid }
+}
 
 // ── BKF-16: admin-gate endpoint global (lintas tenant) ────────────
 // Lubang lama: /orders (list semua order), /orders/:id (detail), /orders/:id/proof
@@ -106,13 +157,17 @@ outcome.post('/intake', async (c) => {
     verify_rubric: false,
   }
 
+  // BKF-18: tenant_id dipaksa dari sesi utk user login non-admin (bukan dari body)
+  const trust = await trustedTenantId(c, b.tenant_id)
+  if (trust.reject) return trust.reject
+
   const id = uid('tk_')
   const t = now()
   await c.env.DB.prepare(
     `INSERT INTO intake_tickets (id,tenant_id,shop_name,contact_phone,contact_name,problem,sku_slug,delivery_mode,doo_json,feasible,feasible_reason,status,created_at,updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    id, b.tenant_id || null, b.shop_name, b.contact_phone, b.contact_name || null,
+    id, trust.tid, b.shop_name, b.contact_phone, b.contact_name || null,
     b.problem, sku.slug, sku.delivery_mode, JSON.stringify(doo), cls.feasible ? 1 : 0,
     cls.reason, 'scoped', t, t
   ).run()
@@ -133,13 +188,17 @@ outcome.post('/checkout', async (c) => {
   const sku = findSKU(b.sku_slug)
   if (!sku) return c.json({ error: 'sku_slug tidak valid' }, 400)
 
+  // BKF-18: tenant_id dipaksa dari sesi utk user login non-admin (bukan dari body)
+  const trust = await trustedTenantId(c, b.tenant_id)
+  if (trust.reject) return trust.reject
+
   const oid = uid('ord_')
   const t = now()
   await c.env.DB.prepare(
     `INSERT INTO orders (id,tenant_id,ticket_id,sku_slug,sku_name,tier,delivery_mode,amount_cents,currency,billing,payment_status,status,created_at,updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    oid, b.tenant_id || null, b.ticket_id || null, sku.slug, sku.name, sku.tier,
+    oid, trust.tid, b.ticket_id || null, sku.slug, sku.name, sku.tier,
     sku.delivery_mode, sku.price_cents, 'IDR', sku.billing, 'pending', 'pending', t, t
   ).run()
 
