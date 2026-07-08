@@ -109,10 +109,10 @@ a { color: var(--accent); text-decoration: none; }
 .grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); }
 
 /* Cards */
-.card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-5); }
+.card { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); transition: border-color var(--transition-base), box-shadow var(--transition-base); }
 .card h3 { margin-bottom: var(--space-2); font-size: 1.1rem; }
 .proof-card .proof-metric { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; color: var(--accent); margin-bottom: var(--space-3); }
-.agent-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-5); transition: border-color 150ms; }
+.agent-card { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); transition: border-color var(--transition-fast), box-shadow var(--transition-base); }
 .agent-card:hover { border-color: var(--accent); }
 .agent-icon { font-size: 1.8rem; margin-bottom: var(--space-3); }
 .agent-card h4 { margin-bottom: var(--space-2); }
@@ -164,7 +164,7 @@ a { color: var(--accent); text-decoration: none; }
 
 /* Stat grid */
 .stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: var(--space-3); }
-.stat { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-4); }
+.stat { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--shadow-card); transition: border-color var(--transition-base); }
 .stat-label { font-size: .78rem; color: var(--text-muted); }
 .stat-value { font-size: 1.35rem; font-weight: 700; font-family: var(--font-mono); margin-top: var(--space-1); }
 .stat-value.accent { color: var(--accent); }
@@ -182,13 +182,13 @@ a { color: var(--accent); text-decoration: none; }
 
 /* Lists */
 .list { display: flex; flex-direction: column; gap: var(--space-3); }
-.list-item { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.list-item { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); box-shadow: var(--shadow-sm); transition: border-color var(--transition-fast); }
 .list-item .li-main { font-weight: 600; }
 .list-item .li-sub { font-size: .8rem; color: var(--text-muted); }
 .li-amount { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
 
 .feed { display: flex; flex-direction: column; gap: var(--space-2); }
-.feed-item { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-3); font-size: .85rem; }
+.feed-item { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-md); padding: var(--space-3); font-size: .85rem; box-shadow: var(--shadow-sm); transition: border-color var(--transition-fast); }
 .feed-item .fi-type { color: var(--accent); font-weight: 600; font-size: .75rem; text-transform: uppercase; }
 .feed-item .fi-ico { margin-right: 4px; }
 .feed-item .fi-time { color: var(--text-muted); font-size: .72rem; }
@@ -214,7 +214,7 @@ a { color: var(--accent); text-decoration: none; }
 
 /* Agent list (dashboard) */
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: var(--space-3); }
-.agent-tile { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-4); text-align: center; cursor: pointer; transition: all 150ms; }
+.agent-tile { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); text-align: center; cursor: pointer; box-shadow: var(--shadow-card); transition: border-color var(--transition-fast), transform var(--transition-fast); }
 .agent-tile:hover { border-color: var(--accent); }
 .agent-tile.disabled { opacity: .5; cursor: not-allowed; }
 .agent-tile .ico { font-size: 1.6rem; }
