@@ -8,6 +8,7 @@ import type { Bindings, TenantContext, AuthUser } from '../types'
 import { uid, now, rupiah } from '../lib/d1'
 import { SKUS, findSKU } from '../data/skus'
 import { isClerkConfigured } from '../lib/clerk'
+import { logSecurityEvent } from '../lib/audit'
 
 type Env = { Bindings: Bindings; Variables: { tenant: TenantContext; authUser: AuthUser | null } }
 const subs = new Hono<Env>()
@@ -75,9 +76,20 @@ subs.post('/subscribe', async (c) => {
   const t = now()
   const qty = Math.max(1, parseInt(b.qty || '1', 10) || 1)
   const id = uid('sub_')
-  // BKF-16: non-admin TIDAK bisa menanam langganan atas nama tenant lain via body
+  // BKF-16: non-admin TIDAK bisa menanam langganan atas nama tenant lain via body.
+  // BKF-18: mismatch body.tenant_id vs tenant sesi → 403 eksplisit + audit log
+  // (bukan silent-override — supaya percobaan lintas tenant terdeteksi & tercatat).
   const sc = scope(c)
-  const tid = sc.enforced ? sc.tid : (b.tenant_id || tenantId(c))
+  const requested = b.tenant_id || tenantId(c)
+  if (sc.enforced && requested && requested !== sc.tid) {
+    await logSecurityEvent(c.env, {
+      user: c.get('authUser'), requested_tenant: requested, actual_tenant: sc.tid,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'subscribe: body.tenant_id != tenant sesi (percobaan tulis atas nama tenant lain)',
+    })
+    return c.json({ error: 'forbidden', message: 'tenant_id di body tidak sesuai dengan tenant akunmu.' }, 403)
+  }
+  const tid = sc.enforced ? sc.tid : requested
   const nextCharge = t + MONTH
 
   await c.env.DB.prepare(
@@ -141,6 +153,11 @@ subs.post('/:id/cancel', async (c) => {
   // BKF-16: ownership — non-admin hanya boleh cancel langganan tenant miliknya
   const sc = scope(c)
   if (!ownsRow(sc, sub.tenant_id)) {
+    await logSecurityEvent(c.env, {
+      user: c.get('authUser'), requested_tenant: sub.tenant_id, actual_tenant: sc.tid,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'cancel: langganan milik tenant lain (percobaan tulis lintas tenant)',
+    })
     return c.json({ error: 'forbidden', message: 'Langganan ini bukan milik tenant-mu.' }, 403)
   }
   if (sub.status === 'cancelled') return c.json({ error: 'sudah cancelled (idempotent)' }, 409)
@@ -253,6 +270,11 @@ subs.post('/upsell/:id/respond', async (c) => {
   // BKF-16: ownership — non-admin hanya boleh respond upsell tenant miliknya
   const sc = scope(c)
   if (!ownsRow(sc, ev.tenant_id)) {
+    await logSecurityEvent(c.env, {
+      user: c.get('authUser'), requested_tenant: ev.tenant_id, actual_tenant: sc.tid,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'upsell respond: event milik tenant lain (percobaan tulis lintas tenant)',
+    })
     return c.json({ error: 'forbidden', message: 'Upsell event ini bukan milik tenant-mu.' }, 403)
   }
 
