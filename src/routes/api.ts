@@ -164,6 +164,12 @@ api.get('/agents', (c) => {
 api.post('/agents/:type', async (c) => {
   const t = c.get('tenant')
   const type = c.req.param('type') as any
+  // BKF-18: validasi agent type di gerbang — 400 jujur, bukan 500 dari throw.
+  // (Jalur WRITE agents (runBooking: customers+bookings) sudah di-scope
+  // ctx.tenant_id dari sesi — diaudit aman, referensi lintas tenant tak mungkin.)
+  if (!AGENT_REGISTRY.some((a) => a.type === type)) {
+    return c.json({ error: 'agent type tidak dikenal' }, 400)
+  }
   let input: any = {}
   try { input = await c.req.json() } catch { /* allow empty */ }
   const result = await dispatchAgent(c.env, t, type, input)
