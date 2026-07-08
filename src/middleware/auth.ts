@@ -15,6 +15,7 @@ import type { Context, Next } from 'hono'
 import type { Bindings, AuthUser, TenantContext } from '../types'
 import { verifyClerkJwt, fetchClerkUserProfile, isClerkConfigured } from '../lib/clerk'
 import { uid, now } from '../lib/d1'
+import { logSecurityEvent } from '../lib/audit'
 
 type AuthEnv = { Bindings: Bindings; Variables: { authUser: AuthUser | null; tenant?: TenantContext } }
 
@@ -114,6 +115,25 @@ async function resolveAuthUser(c: Context<AuthEnv>): Promise<AuthUser | null> {
   return fresh ? toAuthUser(fresh) : null
 }
 
+// ── optionalAuthMiddleware (BKF-18) — pasang c.var.authUser BILA token valid, ──
+// TANPA menolak request anonim. Untuk route funnel public (intake/checkout)
+// yang tetap harus bisa diakses prospek, tapi bila yang manggil adalah user
+// login non-admin → tenant context bisa DIPAKSA dari sesi (bukan body client).
+export async function optionalAuthMiddleware(c: Context<AuthEnv>, next: Next) {
+  const enabled = isClerkConfigured(c.env) || Boolean(c.env.DEV_AUTH_BYPASS_EMAIL)
+  if (!enabled) {
+    c.set('authUser', null)
+    return next()
+  }
+  try {
+    const user = await resolveAuthUser(c)
+    c.set('authUser', user) // null bila anonim — TIDAK 401 (public funnel)
+  } catch {
+    c.set('authUser', null)
+  }
+  await next()
+}
+
 // ── authMiddleware — pasang c.var.authUser; 401 bila Clerk aktif tapi token invalid ──
 export async function authMiddleware(c: Context<AuthEnv>, next: Next) {
   const enabled = isClerkConfigured(c.env) || Boolean(c.env.DEV_AUTH_BYPASS_EMAIL)
@@ -143,9 +163,19 @@ export async function tenantParamGuard(c: Context<AuthEnv>, next: Next) {
 
   const q = (c.req.query('tenant') || c.req.header('x-tenant') || '').toLowerCase()
   if (!user.tenant_subdomain) {
+    await logSecurityEvent(c.env, {
+      user, requested_tenant: q || null, actual_tenant: null,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'akun belum di-map ke tenant manapun',
+    })
     return c.json({ error: 'forbidden', message: `Akun ${user.email} belum di-map ke barbershop manapun — hubungi operator BarberKas.` }, 403)
   }
   if (!q || q !== user.tenant_subdomain) {
+    await logSecurityEvent(c.env, {
+      user, requested_tenant: q || null, actual_tenant: user.tenant_subdomain,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'tenant param mismatch (percobaan akses tenant lain)',
+    })
     return c.json({ error: 'forbidden', message: `Akun ${user.email} hanya boleh mengakses tenant "${user.tenant_subdomain}".` }, 403)
   }
   await next()
@@ -178,6 +208,11 @@ export async function requireTenantAccess(c: Context<AuthEnv>, next: Next) {
   if (!user) return c.json({ error: 'unauthorized', message: 'Login diperlukan.' }, 401)
   if (user.role === 'admin') return next()
   if (!tenant || user.tenant_id !== tenant.tenant_id) {
+    await logSecurityEvent(c.env, {
+      user, requested_tenant: tenant?.subdomain || null, actual_tenant: user.tenant_subdomain,
+      endpoint: new URL(c.req.url).pathname, method: c.req.method,
+      action: 'denied_403', reason: 'requireTenantAccess: user bukan anggota tenant yang diminta',
+    })
     return c.json({
       error: 'forbidden',
       message: `Akun ${user.email} tidak punya akses ke tenant ini.` +
