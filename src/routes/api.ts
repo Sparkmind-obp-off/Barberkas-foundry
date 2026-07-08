@@ -86,11 +86,27 @@ api.post('/transactions', async (c) => {
   if (!body.capster_id || serviceIds.length === 0) {
     return c.json({ error: 'capster_id & service_ids wajib' }, 400)
   }
-  // compute total from services
+  // BKF-18 (audit WRITE): referensi lintas tenant di body TIDAK boleh lolos.
+  // capster_id WAJIB milik tenant sesi — kalau tidak → 400 jujur (bukan nanam
+  // transaksi yang menunjuk capster tenant lain).
+  const cap = await c.env.DB.prepare('SELECT id FROM capsters WHERE id=? AND tenant_id=?')
+    .bind(body.capster_id, t.tenant_id).first()
+  if (!cap) return c.json({ error: 'capster_id tidak ditemukan di barbershop ini' }, 400)
+  // customer_id (opsional) juga wajib milik tenant sesi bila diisi.
+  if (body.customer_id) {
+    const cust = await c.env.DB.prepare('SELECT id FROM customers WHERE id=? AND tenant_id=?')
+      .bind(body.customer_id, t.tenant_id).first()
+    if (!cust) return c.json({ error: 'customer_id tidak ditemukan di barbershop ini' }, 400)
+  }
+  // compute total from services (query sudah di-scope tenant_id)
   const placeholders = serviceIds.map(() => '?').join(',')
   const { results } = await c.env.DB.prepare(
     `SELECT id, price_cents FROM services WHERE tenant_id=? AND id IN (${placeholders})`
   ).bind(t.tenant_id, ...serviceIds).all<any>()
+  // service_ids yang bukan milik tenant → tidak ketemu → tolak jujur (jangan diam-diam total 0)
+  if (!results || results.length !== serviceIds.length) {
+    return c.json({ error: 'ada service_id yang tidak ditemukan di barbershop ini' }, 400)
+  }
   const total = results.reduce((s: number, r: any) => s + r.price_cents, 0)
 
   const id = uid('tx_')
@@ -123,7 +139,12 @@ api.post('/bookings/:id/status', async (c) => {
   const { status } = await c.req.json<any>()
   const allowed = ['pending', 'confirmed', 'done', 'cancelled', 'noshow']
   if (!allowed.includes(status)) return c.json({ error: 'status tidak valid' }, 400)
-  await c.env.DB.prepare('UPDATE bookings SET status=? WHERE id=? AND tenant_id=?').bind(status, id, t.tenant_id).run()
+  // BKF-18: UPDATE sudah di-scope tenant_id (booking tenant lain = no-op) —
+  // cek changes supaya respon jujur 404, bukan pura-pura sukses.
+  const res = await c.env.DB.prepare('UPDATE bookings SET status=? WHERE id=? AND tenant_id=?').bind(status, id, t.tenant_id).run()
+  if (!res.meta || res.meta.changes === 0) {
+    return c.json({ error: 'booking tidak ditemukan di barbershop ini' }, 404)
+  }
   return c.json({ id, status })
 })
 
