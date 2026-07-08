@@ -133,6 +133,15 @@ function humanizeAgentCall(c) {
   return { icon, label, text };
 }
 
+// ── UI-polish P2: empty state hidup (ikon besar + CTA jelas, murni presentational) ──
+function emptyState(icon, text, ctaHtml = '') {
+  return `<div class="empty-state"><span class="es-icon">${icon}</span><span class="es-text">${text}</span>${ctaHtml ? `<span class="es-cta">${ctaHtml}</span>` : ''}</div>`;
+}
+// Helper aksi CTA (global untuk onclick inline)
+window.uiGotoTab = (tab) => { const b = document.querySelector(`.nav-item[data-tab="${tab}"]`); if (b) b.click(); };
+window.uiClick = (id) => { const el = document.getElementById(id); if (el) el.click(); };
+window.uiFocus = (id) => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (el.focus) el.focus(); } };
+
 // ── Tab navigation ──
 document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -172,7 +181,7 @@ async function loadHome() {
       <div class="feed-item"><span class="fi-ico">${h.icon}</span><span class="fi-type">${h.label}</span> <span class="fi-time">· ${timeAgo(c.created_at)}</span><br>
       <span class="fi-text">${escapeHtml(h.text)}</span></div>`;
       }).join('')
-    : '<div class="loading">Belum ada aktivitas AI. Coba panggil agent di tab AI.</div>';
+    : emptyState('✨', 'Belum ada aktivitas AI hari ini. AI Staff siap bantu booking, konten promo, sampai saran harga.', `<button class="btn btn-primary btn-sm" onclick="uiGotoTab('ai')">Panggil AI Staff →</button>`);
 }
 
 // ── TRANSAKSI ──
@@ -184,7 +193,7 @@ async function loadTx() {
         <div><div class="li-main">${t.payment_method.toUpperCase()}</div><div class="li-sub">${fmtDate(t.created_at)} · ${t.status}</div></div>
         <div class="li-amount">${rp(t.total_cents)}</div>
       </div>`).join('')
-    : '<div class="loading">Belum ada transaksi. Yuk catat customer pertama!</div>';
+    : emptyState('🧾', 'Belum ada transaksi tercatat. Catat customer pertamamu — cuma butuh 10 detik.', `<button class="btn btn-primary btn-sm" onclick="uiClick('btn-new-tx')">+ Catat Transaksi Pertama</button>`);
 }
 
 // ── AI ──
@@ -231,7 +240,7 @@ async function loadCust() {
         <div><div class="li-main">${c.name}</div><div class="li-sub">${c.phone} · ${c.visit_count} kunjungan</div></div>
         <div class="li-amount">${rp(c.total_spent_cents)}</div>
       </div>`).join('')
-    : '<div class="loading">Belum ada customer.</div>';
+    : emptyState('🤝', 'Belum ada customer terdaftar. Customer otomatis tercatat saat kamu mencatat transaksi dengan nama.', `<button class="btn btn-primary btn-sm" onclick="uiGotoTab('tx')">Catat Transaksi →</button>`);
 }
 
 // ── BOOKING ──
@@ -245,7 +254,7 @@ async function loadBook() {
           ? `<button class="btn btn-primary btn-sm" onclick="confirmBooking('${b.id}')">Konfirmasi</button>`
           : `<span class="badge badge-success">${b.status}</span>`}</div>
       </div>`).join('')
-    : '<div class="loading">Belum ada booking.</div>';
+    : emptyState('📅', 'Belum ada booking masuk. Coba AI Resepsionis WA — customer bisa booking sendiri lewat chat.', `<button class="btn btn-primary btn-sm" onclick="uiGotoTab('wa')">Coba Simulator WA →</button>`);
 }
 window.confirmBooking = async (id) => {
   await api(`/bookings/${id}/status`, { method: 'POST', body: JSON.stringify({ status: 'confirmed' }) });
@@ -361,7 +370,7 @@ async function loadOutcome() {
         ${(o.payment_status === 'pending') && !(o.mor_ref && o.mor_ref.charAt(0) === 'D') ? `<button class="btn btn-secondary btn-sm" onclick="payOrder('${o.id}')">Simulasi Bayar (stub)</button>` : ''}
         ${o.payment_status === 'paid' && !o.doo_passed ? `<button class="btn btn-primary btn-sm" onclick="deliverOrder('${o.id}')">Tandai LIVE + Bukti (F5)</button>` : ''}
       </div>`).join('')
-    : '<div class="loading">Belum ada pesanan. Coba checkout SKU di atas.</div>';
+    : emptyState('🎯', 'Belum ada pesanan outcome. Pilih SKU dari katalog di atas untuk mulai.', `<a class="es-cta-link" onclick="uiFocus('catalog-list')">Lihat Katalog Outcome ↑</a>`);
 }
 
 // Buat order → bila Duitku live, langsung buka Pop checkout.
@@ -460,7 +469,7 @@ async function loadSubs() {
         <div class="muted" style="font-size:.78rem">${s.amount_fmt} · jatuh tempo ${fmtDate(s.next_charge_at)}${s.qty > 1 ? ' · ' + s.qty + ' staff' : ''}</div></div>
         ${s.status === 'active' ? `<button class="btn btn-secondary btn-sm" onclick="cancelSub('${s.id}')">Henti</button>` : ''}
       </div>`).join('')
-    : '<div class="empty">Belum ada langganan. Klik “+ Langganan”.</div>';
+    : emptyState('💳', 'Belum ada langganan aktif. Aktifkan Care Plan / AI Staff supaya outcome jalan tiap bulan.', `<button class="btn btn-primary btn-sm" onclick="uiClick('btn-subscribe')">+ Aktifkan Langganan</button>`);
 
   // upsell next-best-action
   const u = await sapi(`/upsell?tenant=${TENANT}`);
@@ -473,7 +482,7 @@ async function loadSubs() {
           <button class="btn btn-primary btn-sm" onclick="respondUpsell('${x.upsell_id}','accepted','${x.to_sku}')">Terima</button>
           <button class="btn btn-secondary btn-sm" onclick="respondUpsell('${x.upsell_id}','declined')">Nanti</button>
         </div></div>`).join('')
-    : '<div class="empty">Belum ada rekomendasi upsell (aktifkan langganan dulu).</div>';
+    : emptyState('🚀', 'Belum ada rekomendasi upsell. Aktifkan langganan dulu — AI akan sarankan next best action.', `<a class="es-cta-link" onclick="uiClick('btn-subscribe')">Aktifkan langganan →</a>`);
 
   // reminders
   const r = await sapi('/reminders');
@@ -483,7 +492,7 @@ async function loadSubs() {
     ? rems.map((m) => `<div class="list-item">
         <div><span class="badge badge-muted">${m.kind}</span> <span class="muted" style="font-size:.78rem">${m.status} · ${fmtDate(m.due_at)}</span>
         <div style="font-size:.82rem">${escapeHtml(m.message)}</div></div></div>`).join('')
-    : '<div class="empty">Belum ada reminder.</div>';
+    : emptyState('🔔', 'Belum ada reminder terjadwal. Reminder tagihan otomatis dibuat saat langganan aktif.', `<a class="es-cta-link" onclick="uiClick('btn-subscribe')">Aktifkan langganan →</a>`);
 }
 
 async function cancelSub(id) {
@@ -575,7 +584,7 @@ async function loadRetention() {
         <span class="badge ${m.status === 'sent' ? 'badge-success' : m.status === 'scheduled' ? 'badge-warning' : 'badge-muted'}">${m.status}</span>
         <span class="muted" style="font-size:.75rem">${m.phone} · due ${fmtDate(m.due_at)}</span>
         <div style="font-size:.8rem;margin-top:3px">${escapeHtml(m.message.slice(0, 140))}${m.message.length > 140 ? '…' : ''}</div></div></div>`).join('')
-    : '<div class="loading">Belum ada reminder customer. Booking via simulator WA → reminder H-1 otomatis dibuat.</div>';
+    : emptyState('🔁', 'Belum ada reminder customer. Booking lewat simulator WA di atas — reminder H-1 otomatis dibuat.', `<a class="es-cta-link" onclick="uiFocus('wa-msg')">Mulai chat simulasi ↑</a>`);
 
   const log = await wapi('/wa-log?limit=20');
   const msgs = log.messages || [];
@@ -584,7 +593,7 @@ async function loadRetention() {
         <div><span class="badge ${m.direction === 'in' ? 'badge-muted' : 'badge-info'}">${m.direction === 'in' ? '⬇ in' : '⬆ out'}</span>
         <span class="muted" style="font-size:.72rem">${m.phone} · ${m.status} · ${fmtDate(m.created_at)}</span>
         <div style="font-size:.8rem;margin-top:3px">${escapeHtml((m.body || '').slice(0, 120))}${(m.body || '').length > 120 ? '…' : ''}</div></div></div>`).join('')
-    : '<div class="loading">Belum ada log WA.</div>';
+    : emptyState('📜', 'Belum ada log pesan WA. Kirim pesan pertama lewat simulator di atas.', `<a class="es-cta-link" onclick="uiFocus('wa-msg')">Kirim pesan simulasi ↑</a>`);
 }
 
 function loadWa() { loadRetention(); }
@@ -627,7 +636,7 @@ async function loadAdmin() {
           ${t.owner_email ? ` · 📧 ${escapeHtml(t.owner_email)}` : ''}</div>
         <div class="li-sub"><a href="/app?tenant=${t.subdomain}">buka dashboard →</a></div>
       </div>`).join('')
-    : '<div class="loading">Belum ada tenant.</div>';
+    : emptyState('🏢', 'Belum ada tenant terdaftar. Buat barbershop pertama lewat form onboarding di atas.', `<a class="es-cta-link" onclick="uiFocus('ob-subdomain')">Isi form onboarding ↑</a>`);
 }
 
 document.addEventListener('DOMContentLoaded', () => {});

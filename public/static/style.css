@@ -161,6 +161,22 @@ a { color: var(--accent); text-decoration: none; }
 
 .loading { color: var(--text-muted); padding: var(--space-4); text-align: center; }
 
+/* ── UI-polish P2: empty state hidup (ikon besar + CTA aksen brand) ── */
+.empty-state {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-3);
+}
+.empty-state .es-icon { font-size: 2.4rem; line-height: 1; opacity: .9; }
+.empty-state .es-text { color: var(--text-muted); font-size: .88rem; max-width: 340px; line-height: 1.5; }
+.empty-state .es-cta { margin-top: var(--space-1); }
+.empty-state a.es-cta-link { color: var(--accent); font-weight: 600; font-size: .85rem; cursor: pointer; }
+.empty-state a.es-cta-link:hover { color: var(--accent-bright); }
+
 /* Agent list (dashboard) */
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: var(--space-3); }
 .agent-tile { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-4); text-align: center; cursor: pointer; transition: all 150ms; }
