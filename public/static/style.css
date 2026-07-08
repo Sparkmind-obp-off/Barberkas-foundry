@@ -67,8 +67,10 @@ a { color: var(--accent); text-decoration: none; }
   display: inline-flex; align-items: center; justify-content: center;
   padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-md); font-weight: 500; font-size: 1rem;
-  transition: all 150ms ease; min-height: 44px; border: none; cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  min-height: 44px; border: none; cursor: pointer;
 }
+.btn:active { transform: translateY(1px); }
 .btn-sm { min-height: 36px; padding: var(--space-2) var(--space-4); font-size: .875rem; }
 .btn-lg { min-height: 52px; padding: var(--space-4) var(--space-8); font-size: 1.05rem; }
 /* T1.3: CTA primary = gradient halus 135deg biru→keunguan (satu-satunya tombol ber-gradient) */
@@ -112,7 +114,7 @@ a { color: var(--accent); text-decoration: none; }
 /* Cards */
 .card { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); transition: border-color var(--transition-base), box-shadow var(--transition-base); }
 .card h3 { margin-bottom: var(--space-2); font-size: 1.1rem; }
-.proof-card .proof-metric { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; color: var(--accent); margin-bottom: var(--space-3); }
+.proof-card .proof-metric { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 800; letter-spacing: -.035em; font-variant-numeric: tabular-nums; color: var(--accent); margin-bottom: var(--space-3); }
 .agent-card { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); transition: border-color var(--transition-fast), box-shadow var(--transition-base); }
 .agent-card:hover { border-color: var(--accent); }
 .agent-icon { font-size: 1.8rem; margin-bottom: var(--space-3); }
@@ -120,7 +122,7 @@ a { color: var(--accent); text-decoration: none; }
 .agent-card .badge { margin-top: var(--space-3); display: inline-block; }
 
 /* Badges */
-.badge { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-full); }
+.badge { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-full); transition: box-shadow var(--transition-fast), background var(--transition-fast); }
 .badge-success { background: var(--success-bg); color: var(--success); }
 .badge-warning { background: var(--warning-bg); color: var(--warning); }
 .badge-info { background: var(--accent-bg); color: var(--accent); }
@@ -166,9 +168,11 @@ a { color: var(--accent); text-decoration: none; }
 
 /* Stat grid */
 .stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: var(--space-3); }
-.stat { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--shadow-card); transition: border-color var(--transition-base); }
+.stat { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--shadow-card); transition: border-color var(--transition-base), box-shadow var(--transition-base); }
+.stat:hover { border-color: rgba(74,144,226,.32); }
 .stat-label { font-size: .78rem; color: var(--text-muted); }
-.stat-value { font-size: 1.35rem; font-weight: 700; font-family: var(--font-mono); margin-top: var(--space-1); }
+/* T1.4: angka statistik gaya dashboard finansial premium (ref: Stripe/Linear) — lebih tebal + tighter tracking + tabular */
+.stat-value { font-size: 1.45rem; font-weight: 800; font-family: var(--font-mono); margin-top: var(--space-1); letter-spacing: -.035em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .stat-value.accent { color: var(--accent); }
 /* UI-polish P3: sub-konteks kecil di bawah angka + mini progress bar */
 .stat-sub { font-size: .7rem; color: var(--text-muted); margin-top: var(--space-1); line-height: 1.35; }
@@ -186,9 +190,10 @@ a { color: var(--accent); text-decoration: none; }
 /* Lists */
 .list { display: flex; flex-direction: column; gap: var(--space-3); }
 .list-item { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); box-shadow: var(--shadow-sm); transition: border-color var(--transition-fast); }
+.list-item:hover { border-color: rgba(74,144,226,.3); }
 .list-item .li-main { font-weight: 600; }
 .list-item .li-sub { font-size: .8rem; color: var(--text-muted); }
-.li-amount { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
+.li-amount { font-family: var(--font-mono); color: var(--accent); font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 
 .feed { display: flex; flex-direction: column; gap: var(--space-2); }
 .feed-item { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-md); padding: var(--space-3); font-size: .85rem; box-shadow: var(--shadow-sm); transition: border-color var(--transition-fast); }
