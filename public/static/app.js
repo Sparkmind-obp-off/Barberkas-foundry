@@ -92,6 +92,22 @@ const AGENT_FEED_META = {
 };
 const STATUS_ID = { pending: 'menunggu konfirmasi', confirmed: 'terkonfirmasi', completed: 'selesai', cancelled: 'dibatalkan', success: 'berhasil', fail: 'gagal' };
 
+// ── UI-polish P4: badge status & tier konsisten di semua halaman ──
+// hijau=selesai/aktif/lunas · kuning=pending/menunggu · merah=batal/gagal · biru aksen=info/proses
+const STATUS_BADGE = {
+  completed: 'badge-success', confirmed: 'badge-success', active: 'badge-success', paid: 'badge-success', sent: 'badge-success', success: 'badge-success', delivered: 'badge-success',
+  pending: 'badge-warning', awaiting_payment: 'badge-warning', scheduled: 'badge-warning', trial: 'badge-warning',
+  cancelled: 'badge-danger', failed: 'badge-danger', fail: 'badge-danger', expired: 'badge-danger', churned: 'badge-danger',
+};
+function statusBadge(status) {
+  const s = String(status || '').toLowerCase();
+  return `<span class="badge ${STATUS_BADGE[s] || 'badge-info'}">${escapeHtml(s || '—')}</span>`;
+}
+function tierClass(tier) {
+  const t = String(tier || '').toLowerCase();
+  return ['pro', 'trial', 'starter', 'free', 'enterprise'].includes(t) ? `badge-tier-${t}` : 'badge-info';
+}
+
 // Ubah 1 record agent_calls → kalimat manusiawi per tipe agent.
 function humanizeAgentCall(c) {
   const o = parseAgentSummary(c.output_summary || '');
@@ -166,6 +182,7 @@ $('tenant-switch').addEventListener('change', (e) => {
 async function loadHome() {
   const d = await api('/dashboard');
   $('tier-badge').textContent = (d.tier || '').toUpperCase();
+  $('tier-badge').className = `badge ${tierClass(d.tier)}`;
   // UI-polish P3: stat card = ikon + angka + sub-konteks (data sudah ada dari API, presentational saja)
   const txPct = d.total.tx_count > 0 ? Math.min(100, Math.round((d.today.tx_count / Math.max(1, d.total.tx_count)) * 100)) : 0;
   $('stat-grid').innerHTML = `
@@ -202,7 +219,7 @@ async function loadTx() {
   $('tx-list').innerHTML = transactions.length
     ? transactions.map((t) => `
       <div class="list-item">
-        <div><div class="li-main">${t.payment_method.toUpperCase()}</div><div class="li-sub">${fmtDate(t.created_at)} · ${t.status}</div></div>
+        <div><div class="li-main">${t.payment_method.toUpperCase()}</div><div class="li-sub">${fmtDate(t.created_at)} ${statusBadge(t.status)}</div></div>
         <div class="li-amount">${rp(t.total_cents)}</div>
       </div>`).join('')
     : emptyState('🧾', 'Belum ada transaksi tercatat. Catat customer pertamamu — cuma butuh 10 detik.', `<button class="btn btn-primary btn-sm" onclick="uiClick('btn-new-tx')">+ Catat Transaksi Pertama</button>`);
@@ -261,10 +278,10 @@ async function loadBook() {
   $('book-list').innerHTML = bookings.length
     ? bookings.map((b) => `
       <div class="list-item">
-        <div><div class="li-main">${fmtDate(b.scheduled_at)}</div><div class="li-sub">${b.source} · ${b.status}</div></div>
+        <div><div class="li-main">${fmtDate(b.scheduled_at)}</div><div class="li-sub">${b.source} ${statusBadge(b.status)}</div></div>
         <div>${b.status === 'pending'
           ? `<button class="btn btn-primary btn-sm" onclick="confirmBooking('${b.id}')">Konfirmasi</button>`
-          : `<span class="badge badge-success">${b.status}</span>`}</div>
+          : ''}</div>
       </div>`).join('')
     : emptyState('📅', 'Belum ada booking masuk. Coba AI Resepsionis WA — customer bisa booking sendiri lewat chat.', `<button class="btn btn-primary btn-sm" onclick="uiGotoTab('wa')">Coba Simulator WA →</button>`);
 }
@@ -377,7 +394,7 @@ async function loadOutcome() {
     ? orders.map((o) => `
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:4px">
         <div style="display:flex;justify-content:space-between"><div class="li-main">${o.sku_name}</div><div class="li-amount">${rp(o.amount_cents)}</div></div>
-        <div class="li-sub">${o.payment_status} · ${o.status} ${o.doo_passed ? '· ✓ DoO lulus' : ''} ${o.outcome_proof_url ? `· <a href="${o.outcome_proof_url}" target="_blank">bukti</a>` : ''}</div>
+        <div class="li-sub">${statusBadge(o.payment_status)} ${statusBadge(o.status)} ${o.doo_passed ? '<span class="badge badge-success">✓ DoO lulus</span>' : ''} ${o.outcome_proof_url ? `· <a href="${o.outcome_proof_url}" target="_blank">bukti</a>` : ''}</div>
         ${(o.payment_status === 'pending' || o.payment_status === 'awaiting_payment') && o.mor_ref && o.mor_ref.charAt(0) === 'D' ? `<button class="btn btn-primary btn-sm" onclick="payDuitku('${o.id}','${o.mor_ref}')">Bayar Sekarang (Duitku Pop)</button>` : ''}
         ${(o.payment_status === 'pending') && !(o.mor_ref && o.mor_ref.charAt(0) === 'D') ? `<button class="btn btn-secondary btn-sm" onclick="payOrder('${o.id}')">Simulasi Bayar (stub)</button>` : ''}
         ${o.payment_status === 'paid' && !o.doo_passed ? `<button class="btn btn-primary btn-sm" onclick="deliverOrder('${o.id}')">Tandai LIVE + Bukti (F5)</button>` : ''}
@@ -477,7 +494,7 @@ async function loadSubs() {
   const subs = d.subscriptions || [];
   $('subs-list').innerHTML = subs.length
     ? subs.map((s) => `<div class="list-item">
-        <div><strong>${escapeHtml(s.sku_name)}</strong> <span class="badge ${s.status === 'active' ? 'badge-info' : 'badge-muted'}">${s.status}</span>
+        <div><strong>${escapeHtml(s.sku_name)}</strong> ${statusBadge(s.status)}
         <div class="muted" style="font-size:.78rem">${s.amount_fmt} · jatuh tempo ${fmtDate(s.next_charge_at)}${s.qty > 1 ? ' · ' + s.qty + ' staff' : ''}</div></div>
         ${s.status === 'active' ? `<button class="btn btn-secondary btn-sm" onclick="cancelSub('${s.id}')">Henti</button>` : ''}
       </div>`).join('')
@@ -502,7 +519,7 @@ async function loadSubs() {
   $('reminders-summary').textContent = `${rems.length} reminder · ${r.due_now} jatuh tempo sekarang`;
   $('reminders-list').innerHTML = rems.length
     ? rems.map((m) => `<div class="list-item">
-        <div><span class="badge badge-muted">${m.kind}</span> <span class="muted" style="font-size:.78rem">${m.status} · ${fmtDate(m.due_at)}</span>
+        <div><span class="badge badge-muted">${m.kind}</span> ${statusBadge(m.status)} <span class="muted" style="font-size:.78rem">${fmtDate(m.due_at)}</span>
         <div style="font-size:.82rem">${escapeHtml(m.message)}</div></div></div>`).join('')
     : emptyState('🔔', 'Belum ada reminder terjadwal. Reminder tagihan otomatis dibuat saat langganan aktif.', `<a class="es-cta-link" onclick="uiClick('btn-subscribe')">Aktifkan langganan →</a>`);
 }
@@ -593,7 +610,7 @@ async function loadRetention() {
   $('ret-list').innerHTML = rems.length
     ? rems.slice(0, 20).map((m) => `<div class="list-item">
         <div><span class="badge ${m.kind === 'retention' ? 'badge-info' : 'badge-muted'}">${m.kind}</span>
-        <span class="badge ${m.status === 'sent' ? 'badge-success' : m.status === 'scheduled' ? 'badge-warning' : 'badge-muted'}">${m.status}</span>
+        ${statusBadge(m.status)}
         <span class="muted" style="font-size:.75rem">${m.phone} · due ${fmtDate(m.due_at)}</span>
         <div style="font-size:.8rem;margin-top:3px">${escapeHtml(m.message.slice(0, 140))}${m.message.length > 140 ? '…' : ''}</div></div></div>`).join('')
     : emptyState('🔁', 'Belum ada reminder customer. Booking lewat simulator WA di atas — reminder H-1 otomatis dibuat.', `<a class="es-cta-link" onclick="uiFocus('wa-msg')">Mulai chat simulasi ↑</a>`);
@@ -642,9 +659,9 @@ async function loadAdmin() {
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:4px">
         <div style="display:flex;justify-content:space-between;gap:8px">
           <div class="li-main">${escapeHtml(t.shop_name)} <span class="muted" style="font-size:.72rem">(${t.subdomain})</span></div>
-          <span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-info'}">${t.status}</span>
+          ${statusBadge(t.status)}
         </div>
-        <div class="li-sub">tier: ${t.tier} · 👤 ${t.users_mapped} user · ✂️ ${t.services} layanan · 💈 ${t.capsters} capster · 🧾 ${t.transactions} tx
+        <div class="li-sub"><span class="badge ${tierClass(t.tier)}">${escapeHtml(String(t.tier || '').toUpperCase())}</span> · 👤 ${t.users_mapped} user · ✂️ ${t.services} layanan · 💈 ${t.capsters} capster · 🧾 ${t.transactions} tx
           ${t.owner_email ? ` · 📧 ${escapeHtml(t.owner_email)}` : ''}</div>
         <div class="li-sub"><a href="/app?tenant=${t.subdomain}">buka dashboard →</a></div>
       </div>`).join('')

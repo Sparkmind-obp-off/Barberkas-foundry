@@ -107,6 +107,15 @@ a { color: var(--accent); text-decoration: none; }
 .badge-success { background: var(--success-bg); color: var(--success); }
 .badge-warning { background: var(--warning-bg); color: var(--warning); }
 .badge-info { background: var(--accent-bg); color: var(--accent); }
+/* UI-polish P4: kelas badge yang selama ini dipakai app.js tapi belum terdefinisi + varian danger */
+.badge-muted { background: var(--bg-elevated); color: var(--text-muted); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+/* Badge tier — harmonis dgn palet brand: pro=aksen solid, trial=kuning, starter/free=netral, enterprise=glow */
+.badge-tier-pro { background: var(--accent); color: var(--text-inverse); }
+.badge-tier-trial { background: var(--warning-bg); color: var(--warning); }
+.badge-tier-starter { background: var(--accent-bg); color: var(--accent); }
+.badge-tier-free { background: var(--bg-elevated); color: var(--text-muted); }
+.badge-tier-enterprise { background: var(--accent-bg); color: var(--accent-bright); box-shadow: var(--shadow-glow); }
 
 /* Pricing */
 .price-card { position: relative; }
