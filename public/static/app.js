@@ -255,8 +255,8 @@ async function callAgent(type, available) {
   if (type === 'booking') input = { wa_message: 'bro bisa potong besok?', customer_name: 'Customer Demo', from_phone: '628' + Date.now().toString().slice(-9) };
   const res = await api(`/agents/${type}`, { method: 'POST', body: JSON.stringify(input) });
   out.innerHTML = `<h4 style="margin-bottom:8px">Hasil ${type} <span class="badge badge-success">${res.status}</span></h4>
-    <pre style="white-space:pre-wrap;font-family:var(--font-mono);font-size:.82rem;color:var(--text-secondary)">${escapeHtml(JSON.stringify(res.output, null, 2))}</pre>
-    <p class="muted" style="margin-top:8px;font-size:.75rem">⏱ ${res.duration_ms}ms · biaya ${rp(res.cost_cents)}</p>`;
+    <pre style="white-space:pre-wrap;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-secondary)">${escapeHtml(JSON.stringify(res.output, null, 2))}</pre>
+    <p class="muted" style="margin-top:8px;font-size:var(--text-xs)">⏱ ${res.duration_ms}ms · biaya ${rp(res.cost_cents)}</p>`;
   if (type === 'booking') loadHome();
 }
 
@@ -354,7 +354,7 @@ async function loadOutcome() {
   // Non-admin dapat 403 → tampilkan info jujur, bukan error.
   const tel = await oapi('/telemetry/delivery');
   $('delivery-telemetry').innerHTML = tel.error
-    ? `<div class="muted" style="font-size:.78rem;grid-column:1/-1">🔒 Telemetry global hanya untuk admin (operator BarberKas).</div>`
+    ? `<div class="muted" style="font-size:var(--text-xs);grid-column:1/-1">🔒 Telemetry global hanya untuk admin (operator BarberKas).</div>`
     : `
     <div class="stat"><div class="stat-label">GMV (lunas)</div><div class="stat-value accent">${tel.gmv_fmt}</div></div>
     <div class="stat"><div class="stat-label">Order Lunas</div><div class="stat-value">${tel.orders_paid}/${tel.orders_total}</div></div>
@@ -371,7 +371,7 @@ async function loadOutcome() {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="badge badge-info">${s.tier_label}</span>
-        <span class="muted" style="font-size:.72rem">📐 ${escapeHtml(s.value_metric)}</span>
+        <span class="muted" style="font-size:var(--text-2xs)">📐 ${escapeHtml(s.value_metric)}</span>
         <button class="btn btn-primary btn-sm" onclick="checkoutSku('${s.slug}','${s.checkout}')">${s.checkout === 'instant' ? 'Bayar (Duitku)' : 'Minta Invoice'}</button>
       </div>
     </div>`).join('');
@@ -379,14 +379,14 @@ async function loadOutcome() {
   // payment mode badge
   const pcfg = await payConfig();
   const payNote = pcfg.live
-    ? `<span class="badge badge-success" style="font-size:.7rem">💳 Duitku Pop LIVE (${pcfg.mode})</span>`
-    : `<span class="badge" style="font-size:.7rem;background:#3a2a12;color:#f5b14b">⚠️ Mode stub (tanpa kredensial)</span>`;
-  $('catalog-list').insertAdjacentHTML('afterbegin', `<div style="margin-bottom:8px">${payNote} <span class="muted" style="font-size:.7rem">· MoR: Oasis BI Pro</span></div>`);
+    ? `<span class="badge badge-success" style="font-size:var(--text-2xs)">💳 Duitku Pop LIVE (${pcfg.mode})</span>`
+    : `<span class="badge" style="font-size:var(--text-2xs);background:#3a2a12;color:#f5b14b">⚠️ Mode stub (tanpa kredensial)</span>`;
+  $('catalog-list').insertAdjacentHTML('afterbegin', `<div style="margin-bottom:8px">${payNote} <span class="muted" style="font-size:var(--text-2xs)">· MoR: Oasis BI Pro</span></div>`);
 
   // orders + DoO — BKF-16: admin-gated (403 utk non-admin → info jujur)
   const ordRes = await oapi('/orders');
   if (ordRes.error) {
-    $('orders-list').innerHTML = '<div class="muted" style="font-size:.78rem">🔒 Daftar pesanan global hanya untuk admin (operator BarberKas).</div>';
+    $('orders-list').innerHTML = '<div class="muted" style="font-size:var(--text-xs)">🔒 Daftar pesanan global hanya untuk admin (operator BarberKas).</div>';
     return;
   }
   const orders = ordRes.orders || [];
@@ -471,8 +471,8 @@ $('intake-submit').addEventListener('click', async () => {
   const r = $('intake-result');
   r.classList.remove('hidden');
   r.innerHTML = `<h4 style="margin-bottom:6px">Outcome cocok: ${res.classified_sku.name}</h4>
-    <p class="muted" style="font-size:.82rem">${res.reason}</p>
-    <p style="font-size:.82rem;margin-top:6px">Tier: <span class="badge badge-info">${res.classified_sku.tier}</span> · Mode: ${res.classified_sku.delivery_mode} · ${res.feasible ? 'Feasible ✓' : 'Tidak feasible'}</p>
+    <p class="muted" style="font-size:var(--text-xs)">${res.reason}</p>
+    <p style="font-size:var(--text-xs);margin-top:6px">Tier: <span class="badge badge-info">${res.classified_sku.tier}</span> · Mode: ${res.classified_sku.delivery_mode} · ${res.feasible ? 'Feasible ✓' : 'Tidak feasible'}</p>
     <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="checkoutSku('${res.classified_sku.slug}','instant');document.getElementById('intake-modal').classList.add('hidden')">Lanjut Checkout</button>`;
 });
 
@@ -495,7 +495,7 @@ async function loadSubs() {
   $('subs-list').innerHTML = subs.length
     ? subs.map((s) => `<div class="list-item">
         <div><strong>${escapeHtml(s.sku_name)}</strong> ${statusBadge(s.status)}
-        <div class="muted" style="font-size:.78rem">${s.amount_fmt} · jatuh tempo ${fmtDate(s.next_charge_at)}${s.qty > 1 ? ' · ' + s.qty + ' staff' : ''}</div></div>
+        <div class="muted" style="font-size:var(--text-xs)">${s.amount_fmt} · jatuh tempo ${fmtDate(s.next_charge_at)}${s.qty > 1 ? ' · ' + s.qty + ' staff' : ''}</div></div>
         ${s.status === 'active' ? `<button class="btn btn-secondary btn-sm" onclick="cancelSub('${s.id}')">Henti</button>` : ''}
       </div>`).join('')
     : emptyState('💳', 'Belum ada langganan aktif. Aktifkan Care Plan / AI Staff supaya outcome jalan tiap bulan.', `<button class="btn btn-primary btn-sm" onclick="uiClick('btn-subscribe')">+ Aktifkan Langganan</button>`);
@@ -506,7 +506,7 @@ async function loadSubs() {
   $('upsell-list').innerHTML = ups.length
     ? ups.map((x) => `<div class="card" style="margin-bottom:8px">
         <strong>${escapeHtml(x.to_name)}</strong> <span class="badge badge-info">${x.delta_fmt}</span>
-        <p class="muted" style="font-size:.8rem;margin:6px 0">${escapeHtml(x.reason)}</p>
+        <p class="muted" style="font-size:var(--text-xs);margin:6px 0">${escapeHtml(x.reason)}</p>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary btn-sm" onclick="respondUpsell('${x.upsell_id}','accepted','${x.to_sku}')">Terima</button>
           <button class="btn btn-secondary btn-sm" onclick="respondUpsell('${x.upsell_id}','declined')">Nanti</button>
@@ -519,8 +519,8 @@ async function loadSubs() {
   $('reminders-summary').textContent = `${rems.length} reminder · ${r.due_now} jatuh tempo sekarang`;
   $('reminders-list').innerHTML = rems.length
     ? rems.map((m) => `<div class="list-item">
-        <div><span class="badge badge-muted">${m.kind}</span> ${statusBadge(m.status)} <span class="muted" style="font-size:.78rem">${fmtDate(m.due_at)}</span>
-        <div style="font-size:.82rem">${escapeHtml(m.message)}</div></div></div>`).join('')
+        <div><span class="badge badge-muted">${m.kind}</span> ${statusBadge(m.status)} <span class="muted" style="font-size:var(--text-xs)">${fmtDate(m.due_at)}</span>
+        <div style="font-size:var(--text-xs)">${escapeHtml(m.message)}</div></div></div>`).join('')
     : emptyState('🔔', 'Belum ada reminder terjadwal. Reminder tagihan otomatis dibuat saat langganan aktif.', `<a class="es-cta-link" onclick="uiClick('btn-subscribe')">Aktifkan langganan →</a>`);
 }
 
@@ -570,7 +570,7 @@ const rapi = async (path, opts = {}) =>
 
 function waBubble(text, dir) {
   const isOut = dir === 'out';
-  return `<div style="align-self:${isOut ? 'flex-start' : 'flex-end'};max-width:85%;background:${isOut ? '#1d2a3a' : '#1f6f43'};color:#e8f0f8;border-radius:12px;padding:8px 11px;font-size:.84rem;white-space:pre-wrap">${escapeHtml(text)}</div>`;
+  return `<div style="align-self:${isOut ? 'flex-start' : 'flex-end'};max-width:85%;background:${isOut ? '#1d2a3a' : '#1f6f43'};color:#e8f0f8;border-radius:12px;padding:8px 11px;font-size:var(--text-sm);white-space:pre-wrap">${escapeHtml(text)}</div>`;
 }
 
 function waAppend(text, dir) {
@@ -588,7 +588,7 @@ async function waSend(msg) {
   if (res.reply) {
     waAppend(res.reply, 'out');
     const box = $('wa-chat');
-    box.insertAdjacentHTML('beforeend', `<div class="muted" style="font-size:.68rem;align-self:center">state: ${res.state} · action: ${res.action}${res.booking_id ? ' · booking: ' + res.booking_id : ''} · ${res.duration_ms}ms</div>`);
+    box.insertAdjacentHTML('beforeend', `<div class="muted" style="font-size:var(--text-2xs);align-self:center">state: ${res.state} · action: ${res.action}${res.booking_id ? ' · booking: ' + res.booking_id : ''} · ${res.duration_ms}ms</div>`);
     box.scrollTop = box.scrollHeight;
   } else {
     waAppend('⚠️ ' + (res.error || 'gagal'), 'out');
@@ -611,8 +611,8 @@ async function loadRetention() {
     ? rems.slice(0, 20).map((m) => `<div class="list-item">
         <div><span class="badge ${m.kind === 'retention' ? 'badge-info' : 'badge-muted'}">${m.kind}</span>
         ${statusBadge(m.status)}
-        <span class="muted" style="font-size:.75rem">${m.phone} · due ${fmtDate(m.due_at)}</span>
-        <div style="font-size:.8rem;margin-top:3px">${escapeHtml(m.message.slice(0, 140))}${m.message.length > 140 ? '…' : ''}</div></div></div>`).join('')
+        <span class="muted" style="font-size:var(--text-xs)">${m.phone} · due ${fmtDate(m.due_at)}</span>
+        <div style="font-size:var(--text-xs);margin-top:3px">${escapeHtml(m.message.slice(0, 140))}${m.message.length > 140 ? '…' : ''}</div></div></div>`).join('')
     : emptyState('🔁', 'Belum ada reminder customer. Booking lewat simulator WA di atas — reminder H-1 otomatis dibuat.', `<a class="es-cta-link" onclick="uiFocus('wa-msg')">Mulai chat simulasi ↑</a>`);
 
   const log = await wapi('/wa-log?limit=20');
@@ -620,8 +620,8 @@ async function loadRetention() {
   $('wa-log').innerHTML = msgs.length
     ? msgs.slice(-20).map((m) => `<div class="list-item">
         <div><span class="badge ${m.direction === 'in' ? 'badge-muted' : 'badge-info'}">${m.direction === 'in' ? '⬇ in' : '⬆ out'}</span>
-        <span class="muted" style="font-size:.72rem">${m.phone} · ${m.status} · ${fmtDate(m.created_at)}</span>
-        <div style="font-size:.8rem;margin-top:3px">${escapeHtml((m.body || '').slice(0, 120))}${(m.body || '').length > 120 ? '…' : ''}</div></div></div>`).join('')
+        <span class="muted" style="font-size:var(--text-2xs)">${m.phone} · ${m.status} · ${fmtDate(m.created_at)}</span>
+        <div style="font-size:var(--text-xs);margin-top:3px">${escapeHtml((m.body || '').slice(0, 120))}${(m.body || '').length > 120 ? '…' : ''}</div></div></div>`).join('')
     : emptyState('📜', 'Belum ada log pesan WA. Kirim pesan pertama lewat simulator di atas.', `<a class="es-cta-link" onclick="uiFocus('wa-msg')">Kirim pesan simulasi ↑</a>`);
 }
 
@@ -652,13 +652,13 @@ const aapi = async (path, opts = {}) =>
 async function loadAdmin() {
   const res = await aapi('/tenants');
   const list = $('admin-tenant-list');
-  if (res.error) { list.innerHTML = `<div class="muted" style="font-size:.78rem">🔒 ${res.message || res.error}</div>`; return; }
+  if (res.error) { list.innerHTML = `<div class="muted" style="font-size:var(--text-xs)">🔒 ${res.message || res.error}</div>`; return; }
   const tenants = res.tenants || [];
   list.innerHTML = tenants.length
     ? tenants.map((t) => `
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:4px">
         <div style="display:flex;justify-content:space-between;gap:8px">
-          <div class="li-main">${escapeHtml(t.shop_name)} <span class="muted" style="font-size:.72rem">(${t.subdomain})</span></div>
+          <div class="li-main">${escapeHtml(t.shop_name)} <span class="muted" style="font-size:var(--text-2xs)">(${t.subdomain})</span></div>
           ${statusBadge(t.status)}
         </div>
         <div class="li-sub"><span class="badge ${tierClass(t.tier)}">${escapeHtml(String(t.tier || '').toUpperCase())}</span> · 👤 ${t.users_mapped} user · ✂️ ${t.services} layanan · 💈 ${t.capsters} capster · 🧾 ${t.transactions} tx

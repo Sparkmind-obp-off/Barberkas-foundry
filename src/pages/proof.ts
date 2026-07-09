@@ -59,7 +59,7 @@ function caseCard(c: CaseStudy): string {
       </div>
       <h3>${c.business}</h3>
       <p class="muted">${c.headline}</p>
-      <p class="muted" style="font-size:.85rem">📍 ${c.location} · ⏱️ ${c.tto_days} hari (Time-to-Outcome)</p>
+      <p class="muted" style="font-size:var(--text-sm)">📍 ${c.location} · ⏱️ ${c.tto_days} hari (Time-to-Outcome)</p>
       <span class="badge badge-info">Lihat bukti →</span>
     </a>`
 }
@@ -147,7 +147,7 @@ export function casePage(c: CaseStudy): string {
 
   const quote = c.quote
     ? `<blockquote class="card" style="border-left:4px solid var(--accent,#4A90E2);padding:1rem 1.2rem">
-         <p style="font-size:1.05rem">"${c.quote.text}"</p>
+         <p style="font-size:var(--text-lg)">"${c.quote.text}"</p>
          <p class="muted">— ${c.quote.by}</p>
        </blockquote>`
     : ''

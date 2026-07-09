@@ -28,11 +28,11 @@ export function dashboardPage(): string {
 <!-- BKF-14 — Auth Clerk: overlay login (muncul hanya bila auth aktif & belum login) -->
 <div id="auth-overlay" class="hidden" style="position:fixed;inset:0;z-index:1000;background:rgba(7,12,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px">
   <div style="text-align:center">
-    <div class="brand" style="font-size:1.4rem;justify-content:center"><span class="brand-mark">⛿</span> BarberKas</div>
-    <p class="muted" style="font-size:.85rem;margin-top:6px">Masuk untuk mengakses dashboard barbershop-mu.</p>
+    <div class="brand" style="font-size:var(--text-2xl);justify-content:center"><span class="brand-mark">⛿</span> BarberKas</div>
+    <p class="muted" style="font-size:var(--text-sm);margin-top:6px">Masuk untuk mengakses dashboard barbershop-mu.</p>
   </div>
   <div id="clerk-signin"></div>
-  <p id="auth-status" class="muted" style="font-size:.78rem">Memuat login…</p>
+  <p id="auth-status" class="muted" style="font-size:var(--text-xs)">Memuat login…</p>
 </div>
 
 <main class="app-main container-app">
@@ -81,7 +81,7 @@ export function dashboardPage(): string {
       <label class="label">Nomor WA customer (simulasi)</label>
       <input class="input" id="wa-phone" value="6281234509876" placeholder="628…">
       <div id="wa-chat" style="max-height:320px;overflow-y:auto;background:var(--bg-primary,#0b1220);border-radius:10px;padding:10px;margin:10px 0;display:flex;flex-direction:column;gap:6px">
-        <div class="muted" style="font-size:.78rem">Mulai chat — coba: "halo", "booking", "cuci potong besok jam 3 sore", "ganti jadwal", "batal"…</div>
+        <div class="muted" style="font-size:var(--text-xs)">Mulai chat — coba: "halo", "booking", "cuci potong besok jam 3 sore", "ganti jadwal", "batal"…</div>
       </div>
       <div style="display:flex;gap:8px">
         <input class="input" id="wa-msg" placeholder="Ketik pesan WA customer…" style="flex:1;margin:0">
@@ -100,7 +100,7 @@ export function dashboardPage(): string {
     <h3 class="sub-title">🔁 Retensi &amp; Reminder Customer</h3>
     <div id="ret-telemetry" class="stat-grid" style="margin-bottom:var(--space-3)"></div>
     <div class="panel-head" style="margin-bottom:var(--space-2)">
-      <span class="muted" style="font-size:.8rem" id="ret-summary">…</span>
+      <span class="muted" style="font-size:var(--text-xs)" id="ret-summary">…</span>
       <span style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" id="btn-ret-scan">Scan idle 3-4 mgg</button>
         <button class="btn btn-primary btn-sm" id="btn-ret-run">Kirim jatuh tempo</button>
@@ -140,7 +140,7 @@ export function dashboardPage(): string {
     <div id="upsell-list" class="list"><div class="loading">Memuat…</div></div>
     <h3 class="sub-title">🔔 Reminder terjadwal</h3>
     <div class="panel-head" style="margin-bottom:var(--space-2)">
-      <span class="muted" style="font-size:.8rem" id="reminders-summary">…</span>
+      <span class="muted" style="font-size:var(--text-xs)" id="reminders-summary">…</span>
       <button class="btn btn-secondary btn-sm" id="btn-run-reminders">Proses jatuh tempo</button>
     </div>
     <div id="reminders-list" class="list"><div class="loading">Memuat…</div></div>
@@ -168,7 +168,7 @@ export function dashboardPage(): string {
       <label class="label">Trial (hari)</label>
       <input class="input" id="ob-trial" type="number" value="14" min="0" max="90">
       <button type="submit" class="btn btn-primary" id="ob-submit">Buat Tenant</button>
-      <div id="ob-result" class="muted" style="font-size:.8rem"></div>
+      <div id="ob-result" class="muted" style="font-size:var(--text-xs)"></div>
     </form>
     <h3 class="sub-title">Daftar Tenant</h3>
     <div id="admin-tenant-list" class="list"><div class="loading">Memuat…</div></div>
@@ -178,7 +178,7 @@ export function dashboardPage(): string {
       <input class="input" id="mp-tenant" placeholder="subdomain tenant">
       <select class="input" id="mp-role"><option value="owner">owner</option><option value="staff">staff</option><option value="admin">admin</option></select>
       <button type="submit" class="btn btn-secondary btn-sm">Map</button>
-      <div id="mp-result" class="muted" style="font-size:.8rem"></div>
+      <div id="mp-result" class="muted" style="font-size:var(--text-xs)"></div>
     </form>
   </section>
 </main>
@@ -217,7 +217,7 @@ export function dashboardPage(): string {
 <div class="modal-overlay hidden" id="intake-modal">
   <div class="modal">
     <h3>Intake Outcome (F0)</h3>
-    <p class="muted" style="font-size:.82rem;margin-bottom:var(--space-2)">Ceritakan barbershop & masalahmu → AI klasifikasi outcome SKU yang pas (Truth-Lock).</p>
+    <p class="muted" style="font-size:var(--text-xs);margin-bottom:var(--space-2)">Ceritakan barbershop & masalahmu → AI klasifikasi outcome SKU yang pas (Truth-Lock).</p>
     <label class="label">Nama Barbershop</label>
     <input class="input" id="in-shop" placeholder="cth: AlfaCut Purwokerto">
     <label class="label">No. WhatsApp</label>
@@ -236,7 +236,7 @@ export function dashboardPage(): string {
 <div class="modal-overlay hidden" id="subs-modal">
   <div class="modal">
     <h3>Aktifkan Langganan</h3>
-    <p class="muted" style="font-size:.82rem;margin-bottom:var(--space-2)">Pilih paket retain (Care Plan / AI Staff). Harga = sumber kebenaran kode (Truth-Lock).</p>
+    <p class="muted" style="font-size:var(--text-xs);margin-bottom:var(--space-2)">Pilih paket retain (Care Plan / AI Staff). Harga = sumber kebenaran kode (Truth-Lock).</p>
     <label class="label">Paket</label>
     <select class="input" id="subs-plan"></select>
     <label class="label">Jumlah (untuk AI Staff add-on)</label>
