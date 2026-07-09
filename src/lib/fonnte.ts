@@ -15,6 +15,9 @@ export interface FonnteSendResult {
   id?: string
   detail?: string
   error?: string
+  // BKF-20: level sanitasi yang akhirnya berhasil terkirim
+  // 0 = format asli, 1 = soft-sanitized, 2 = plain-text fallback
+  sanitize_level?: SanitizeLevel
 }
 
 // Normalisasi nomor ke format internasional Indonesia (62…) tanpa + / spasi.
@@ -26,19 +29,8 @@ export function normalizePhone(raw: string): string {
   return p
 }
 
-// Kirim pesan WA via Fonnte.
-export async function fonnteSend(
-  env: Bindings,
-  target: string,
-  message: string
-): Promise<FonnteSendResult> {
-  const token = env.FONNTE_TOKEN
-  const phone = normalizePhone(target)
-
-  if (!token) {
-    return { ok: false, mode: 'stub', detail: 'FONNTE_TOKEN belum di-set — pesan tidak dikirim (Truth-Lock).' }
-  }
-
+// Satu percobaan kirim mentah ke API Fonnte (tanpa retry).
+async function fonnteSendRaw(token: string, phone: string, message: string): Promise<FonnteSendResult> {
   try {
     const form = new URLSearchParams()
     form.set('target', phone)
@@ -54,13 +46,50 @@ export async function fonnteSend(
       body: form.toString(),
     })
     const j = (await r.json().catch(() => ({}))) as any
-    if (r.ok && (j.status === true || j.status === 'true' || j.detail)) {
+    // Fonnte kadang balas HTTP 200 tapi status:false + reason — cek dua-duanya.
+    const rejected = j.status === false || j.status === 'false'
+    if (r.ok && !rejected && (j.status === true || j.status === 'true' || j.detail)) {
       return { ok: true, mode: 'live', id: Array.isArray(j.id) ? j.id[0] : j.id, detail: j.detail }
     }
     return { ok: false, mode: 'live', error: j.reason || j.detail || `HTTP ${r.status}` }
   } catch (e: any) {
     return { ok: false, mode: 'live', error: 'fetch_failed: ' + (e?.message || String(e)) }
   }
+}
+
+// Kirim pesan WA via Fonnte — dengan retry-with-fallback untuk paket FREE (BKF-20):
+// attempt#1 pesan asli → jika ditolak "invalid message request on free package",
+// attempt#2 versi soft-sanitized (L1) → masih ditolak, attempt#3 plain-text (L2).
+// Hasilnya: bot tetap membalas customer di paket free — degradasi format, bukan gagal total.
+// startLevel > 0 dipakai saat pre-sanitize aktif (env FONNTE_FREE_SANITIZE, T3).
+export async function fonnteSend(
+  env: Bindings,
+  target: string,
+  message: string,
+  startLevel: SanitizeLevel = 0
+): Promise<FonnteSendResult> {
+  const token = env.FONNTE_TOKEN
+  const phone = normalizePhone(target)
+
+  if (!token) {
+    return { ok: false, mode: 'stub', detail: 'FONNTE_TOKEN belum di-set — pesan tidak dikirim (Truth-Lock).' }
+  }
+
+  let last: FonnteSendResult = { ok: false, mode: 'live', error: 'not_attempted' }
+  let prevText: string | null = null
+  for (let lvl = startLevel; lvl <= 2; lvl++) {
+    const text = freePackageSanitize(message, lvl as SanitizeLevel)
+    // skip level yang tidak mengubah teks (mis. pesan tanpa emoji/bullet) — hemat kuota
+    if (prevText !== null && text === prevText) continue
+    prevText = text
+    last = await fonnteSendRaw(token, phone, text)
+    last.sanitize_level = lvl as SanitizeLevel
+    if (last.ok) return last
+    // hanya retry bila penolakan khas free-package; error lain (token salah,
+    // device disconnect, dsb) tidak akan sembuh dengan sanitasi → stop.
+    if (!isFreePackageReject(last.error)) return last
+  }
+  return last
 }
 
 // Parse payload webhook Fonnte (incoming message). Fonnte kirim x-www-form-urlencoded
