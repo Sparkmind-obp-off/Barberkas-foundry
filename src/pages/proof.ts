@@ -53,7 +53,7 @@ function caseCard(c: CaseStudy): string {
   return `
     <a class="card proof-card" href="/proof/${c.slug}" style="text-decoration:none;display:block">
       <div class="proof-metric">${c.emoji}</div>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.3rem 0">
+      <div style="display:flex;gap:var(--space-1h);flex-wrap:wrap;margin:var(--space-1) 0">
         ${statusBadge(c.status)}
         <span class="badge badge-info">${DELIVERY_LABEL[c.delivery_mode]}</span>
       </div>
@@ -136,7 +136,7 @@ export function casePage(c: CaseStudy): string {
   const metricRows = c.metrics
     .map(
       (m) => `
-      <div class="card" style="display:grid;grid-template-columns:1.4fr 1fr 1fr .6fr;gap:.5rem;align-items:center">
+      <div class="card" style="display:grid;grid-template-columns:1.4fr 1fr 1fr .6fr;gap:var(--space-2);align-items:center">
         <div><strong>${m.label}</strong></div>
         <div class="muted">Sebelum: ${m.before}</div>
         <div class="accent">Sesudah: ${m.after}</div>
@@ -146,7 +146,7 @@ export function casePage(c: CaseStudy): string {
     .join('')
 
   const quote = c.quote
-    ? `<blockquote class="card" style="border-left:4px solid var(--accent,#4A90E2);padding:1rem 1.2rem">
+    ? `<blockquote class="card" style="border-left:4px solid var(--accent,#4A90E2);padding:var(--space-4) var(--space-5)">
          <p style="font-size:var(--text-lg)">"${c.quote.text}"</p>
          <p class="muted">— ${c.quote.by}</p>
        </blockquote>`
@@ -168,7 +168,7 @@ ${siteHeader()}
   <section class="hero" id="hero-section">
     <div class="container">
       <p class="eyebrow"><a href="/case-study" style="color:inherit">← Semua bukti</a></p>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0">
+      <div style="display:flex;gap:var(--space-1h);flex-wrap:wrap;margin:var(--space-1h) 0">
         ${statusBadge(c.status)}
         <span class="badge badge-info">${DELIVERY_LABEL[c.delivery_mode]}</span>
         <span class="badge badge-info">⏱️ TTO ${c.tto_days} hari</span>
@@ -196,12 +196,12 @@ ${siteHeader()}
   <section class="section section-alt" id="metrics">
     <div class="container">
       <h2 class="section-title">Metrik before → after</h2>
-      <div class="list" style="display:grid;gap:.6rem">${metricRows}</div>
+      <div class="list" style="display:grid;gap:var(--space-2h)">${metricRows}</div>
     </div>
   </section>
 
   <section class="section" id="proof">
-    <div class="container" style="display:grid;gap:.8rem">
+    <div class="container" style="display:grid;gap:var(--space-3)">
       ${truthNote}
       ${quote}
     </div>

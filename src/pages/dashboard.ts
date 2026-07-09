@@ -26,10 +26,10 @@ export function dashboardPage(): string {
 </header>
 
 <!-- BKF-14 — Auth Clerk: overlay login (muncul hanya bila auth aktif & belum login) -->
-<div id="auth-overlay" class="hidden" style="position:fixed;inset:0;z-index:1000;background:rgba(7,12,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px">
+<div id="auth-overlay" class="hidden" style="position:fixed;inset:0;z-index:1000;background:rgba(7,12,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-4);padding:var(--space-5)">
   <div style="text-align:center">
     <div class="brand" style="font-size:var(--text-2xl);justify-content:center"><span class="brand-mark">⛿</span> BarberKas</div>
-    <p class="muted" style="font-size:var(--text-sm);margin-top:6px">Masuk untuk mengakses dashboard barbershop-mu.</p>
+    <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1h)">Masuk untuk mengakses dashboard barbershop-mu.</p>
   </div>
   <div id="clerk-signin"></div>
   <p id="auth-status" class="muted" style="font-size:var(--text-xs)">Memuat login…</p>
@@ -80,14 +80,14 @@ export function dashboardPage(): string {
     <div class="card" style="margin-bottom:var(--space-4)">
       <label class="label">Nomor WA customer (simulasi)</label>
       <input class="input" id="wa-phone" value="6281234509876" placeholder="628…">
-      <div id="wa-chat" style="max-height:320px;overflow-y:auto;background:var(--bg-primary,#0b1220);border-radius:10px;padding:10px;margin:10px 0;display:flex;flex-direction:column;gap:6px">
+      <div id="wa-chat" style="max-height:320px;overflow-y:auto;background:var(--bg-primary,#0b1220);border-radius:var(--radius-md);padding:var(--space-2h);margin:var(--space-2h) 0;display:flex;flex-direction:column;gap:var(--space-1h)">
         <div class="muted" style="font-size:var(--text-xs)">Mulai chat — coba: "halo", "booking", "cuci potong besok jam 3 sore", "ganti jadwal", "batal"…</div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:var(--space-2)">
         <input class="input" id="wa-msg" placeholder="Ketik pesan WA customer…" style="flex:1;margin:0">
         <button class="btn btn-primary" id="wa-send">Kirim</button>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px" id="wa-quick">
+      <div style="display:flex;gap:var(--space-1h);flex-wrap:wrap;margin-top:var(--space-2)" id="wa-quick">
         <span class="chip" data-q="halo">halo</span>
         <span class="chip" data-q="menu">menu</span>
         <span class="chip" data-q="booking">booking</span>
@@ -101,7 +101,7 @@ export function dashboardPage(): string {
     <div id="ret-telemetry" class="stat-grid" style="margin-bottom:var(--space-3)"></div>
     <div class="panel-head" style="margin-bottom:var(--space-2)">
       <span class="muted" style="font-size:var(--text-xs)" id="ret-summary">…</span>
-      <span style="display:flex;gap:6px">
+      <span style="display:flex;gap:var(--space-1h)">
         <button class="btn btn-secondary btn-sm" id="btn-ret-scan">Scan idle 3-4 mgg</button>
         <button class="btn btn-primary btn-sm" id="btn-ret-run">Kirim jatuh tempo</button>
       </span>
@@ -152,7 +152,7 @@ export function dashboardPage(): string {
       <h2 class="panel-title">Admin — Onboarding Tenant</h2>
     </div>
     <p class="section-sub" style="margin-bottom:var(--space-4)">Buat barbershop baru <strong>tanpa SQL migration manual</strong>: 1 form → tenant + layanan default + capster + mapping owner email (langsung bisa login Google).</p>
-    <form id="onboard-form" class="card" style="padding:var(--space-4);display:flex;flex-direction:column;gap:8px">
+    <form id="onboard-form" class="card" style="padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)">
       <label class="label">Subdomain (huruf kecil/angka/dash, 3-30 char)</label>
       <input class="input" id="ob-subdomain" placeholder="cth: cutoclock" autocomplete="off">
       <label class="label">Nama Barbershop</label>
@@ -173,7 +173,7 @@ export function dashboardPage(): string {
     <h3 class="sub-title">Daftar Tenant</h3>
     <div id="admin-tenant-list" class="list"><div class="loading">Memuat…</div></div>
     <h3 class="sub-title">Map Email → Tenant</h3>
-    <form id="map-form" class="card" style="padding:var(--space-4);display:flex;flex-direction:column;gap:8px">
+    <form id="map-form" class="card" style="padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)">
       <input class="input" id="mp-email" placeholder="email user">
       <input class="input" id="mp-tenant" placeholder="subdomain tenant">
       <select class="input" id="mp-role"><option value="owner">owner</option><option value="staff">staff</option><option value="admin">admin</option></select>

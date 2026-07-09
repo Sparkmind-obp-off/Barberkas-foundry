@@ -95,9 +95,9 @@ export function solutionPage(v: Vertical): string {
   }).join('')
 
   const faqItems = faqs.map((f, i) => `
-      <details class="card" style="margin-bottom:.75rem"${i === 0 ? ' open' : ''}>
+      <details class="card" style="margin-bottom:var(--space-3)"${i === 0 ? ' open' : ''}>
         <summary style="cursor:pointer;font-weight:700">${f.q}</summary>
-        <p class="muted" style="margin-top:.5rem">${f.a}</p>
+        <p class="muted" style="margin-top:var(--space-2)">${f.a}</p>
       </details>`).join('')
 
   // Opsi base SKU untuk kalkulator (hanya yang relevan vertikal)
@@ -147,10 +147,10 @@ ${siteHeader()}
           <label class="label" for="calc-base">Paket dasar</label>
           <select class="input" id="calc-base">${baseOptions}</select>
 
-          <label class="label" for="calc-staff" style="margin-top:1rem">AI Staff tambahan (0–9)</label>
+          <label class="label" for="calc-staff" style="margin-top:var(--space-4)">AI Staff tambahan (0–9)</label>
           <input class="input" id="calc-staff" type="number" min="0" max="9" value="0">
 
-          <label class="label" style="margin-top:1rem;display:flex;align-items:center;gap:.5rem">
+          <label class="label" style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-2)">
             <input id="calc-care" type="checkbox"> Tambah Care Plan (update &amp; support)
           </label>
         </article>
@@ -180,19 +180,19 @@ ${siteHeader()}
         <label class="label" for="f-shop">Nama usaha</label>
         <input class="input" id="f-shop" required placeholder="Contoh: ${v.name} ${v.slug === 'barbershop' ? 'AlfaCut' : 'Sejahtera'}">
 
-        <label class="label" for="f-name" style="margin-top:1rem">Nama kamu</label>
+        <label class="label" for="f-name" style="margin-top:var(--space-4)">Nama kamu</label>
         <input class="input" id="f-name" placeholder="Nama kontak">
 
-        <label class="label" for="f-phone" style="margin-top:1rem">Nomor WhatsApp</label>
+        <label class="label" for="f-phone" style="margin-top:var(--space-4)">Nomor WhatsApp</label>
         <input class="input" id="f-phone" required placeholder="08xxxxxxxxxx">
 
-        <label class="label" for="f-problem" style="margin-top:1rem">Masalah / kebutuhanmu</label>
+        <label class="label" for="f-problem" style="margin-top:var(--space-4)">Masalah / kebutuhanmu</label>
         <textarea class="input" id="f-problem" rows="4" required placeholder="${v.intake_placeholder}"></textarea>
 
-        <div class="modal-actions" style="margin-top:1.25rem">
+        <div class="modal-actions" style="margin-top:var(--space-5)">
           <button type="submit" class="btn btn-primary btn-lg">Kirim Intake</button>
         </div>
-        <div id="intake-result" style="margin-top:1rem"></div>
+        <div id="intake-result" style="margin-top:var(--space-4)"></div>
       </form>
     </div>
   </section>
@@ -240,7 +240,7 @@ ${siteFooter()}
       var totals = '';
       if(d.one_time_cents>0) totals += '<div class="stat"><span class="stat-label">Sekali bayar</span><span class="stat-value">'+rupiah(d.one_time_cents)+'</span></div>';
       if(d.monthly_cents>0) totals += '<div class="stat"><span class="stat-label">Per bulan</span><span class="stat-value">'+rupiah(d.monthly_cents)+'/bln</span></div>';
-      resEl.innerHTML = '<div class="list">'+rows+'</div><div class="stat-grid" style="margin-top:1rem">'+totals+'</div><p class="muted" style="margin-top:.75rem">'+d.note+'</p>';
+      resEl.innerHTML = '<div class="list">'+rows+'</div><div class="stat-grid" style="margin-top:var(--space-4)">'+totals+'</div><p class="muted" style="margin-top:var(--space-3)">'+d.note+'</p>';
     } catch(e){ resEl.innerHTML = '<p class="muted">Gagal memuat estimasi.</p>'; }
   }
   baseEl.addEventListener('change', calc);
@@ -270,7 +270,7 @@ ${siteFooter()}
       if(r.ok){
         var sku = d.classified_sku || {};
         out.innerHTML = '<div class="card"><span class="badge badge-success">Intake diterima</span>'
-          + '<p style="margin-top:.5rem"><strong>Rekomendasi:</strong> '+(sku.name||'-')+'</p>'
+          + '<p style="margin-top:var(--space-2)"><strong>Rekomendasi:</strong> '+(sku.name||'-')+'</p>'
           + '<p class="muted">'+(d.feasible_reason||d.reason||'Tim kami akan menghubungi via WhatsApp.')+'</p></div>';
       } else {
         out.innerHTML = '<p class="badge badge-warning">'+(d.error||'Gagal mengirim intake')+'</p>';

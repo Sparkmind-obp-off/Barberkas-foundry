@@ -65,7 +65,7 @@ export function landingPage(): string {
           <p class="muted">Lewat MoR Oasis BI Pro (Duitku). Faktur otomatis terkirim ke WhatsApp.</p>
         </article>
       </div>
-      <p style="text-align:center;margin-top:1.2rem">
+      <p style="text-align:center;margin-top:var(--space-5)">
         <a href="/case-study" class="btn btn-secondary">Lihat studi kasus & metrik before/after →</a>
       </p>
     </div>
