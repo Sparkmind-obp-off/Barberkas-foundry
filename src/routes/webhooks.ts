@@ -4,15 +4,15 @@
 //   reschedule/batal tanpa admin → auto-jadwal reminder H-1.
 // Truth-Lock: balasan WA nyata hanya terkirim bila FONNTE_TOKEN set (else stub).
 //
-// Tenant resolution (webhook tak punya subdomain):
-//   1) ?tenant=<subdomain>  (set di URL webhook Fonnte per-device)
-//   2) body.device  → cocokkan tenants.owner_phone
-//   3) fallback tenant demo pertama (dev only)
+// Tenant resolution:
+//   /webhooks/fonnte (BKF-19): HANYA via tenant_wa_devices (device penerima → tenant),
+//     + verifikasi ?secret= + idempotency inboxid. TANPA fallback.
+//   Endpoint dashboard (simulate/wa-log/…): resolveTenant strict ?tenant= (BKF-18).
 
 import { Hono } from 'hono'
 import type { Bindings, Tenant } from '../types'
 import { uid, now } from '../lib/d1'
-import { parseFonnteWebhook, fonnteSend, normalizePhone } from '../lib/fonnte'
+import { parseFonnteWebhook, fonnteSend, normalizePhone, timingSafeEqual } from '../lib/fonnte'
 import { runReceptionist } from '../agents/receptionist'
 import { isClerkConfigured } from '../lib/clerk'
 import { logSecurityEvent } from '../lib/audit'
@@ -89,7 +89,48 @@ async function handleIncoming(c: any, tenant: Tenant, phone: string, message: st
 }
 
 // ── Fonnte incoming WA webhook ──────────────────────────────────
+// BKF-19: hardened public surface —
+// 1) Verifikasi shared secret ?secret= (Fonnte tak punya HMAC — secret di URL
+//    webhook adalah praktik standar; constant-time compare, gagal → 403+audit).
+// 2) Tenant HANYA dari tenant_wa_devices via nomor device PENERIMA (payload
+//    field `device` = nomor WA milik kita, dikontrol via dashboard Fonnte) —
+//    device tak terdaftar → 404+audit, TANPA fallback (pelajaran Bug 2/BKF-18).
+// 3) Idempotency: inboxid Fonnte (else hash payload) → UNIQUE di
+//    wa_webhook_events; retry Fonnte tidak memproses FSM 2x (anti booking dobel).
+// 4) FSM: reuse handleIncoming → runReceptionist — fungsi yang SAMA dengan simulator.
+async function eventKeyFromPayload(inc: { device?: string; sender: string; message: string; inboxid?: string; timestamp?: string }): Promise<string> {
+  if (inc.inboxid) return `inbox:${inc.inboxid}`
+  const raw = `${inc.device || ''}|${inc.sender}|${inc.message}|${inc.timestamp || ''}`
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
+  return 'hash:' + [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 webhooks.post('/fonnte', async (c) => {
+  const endpoint = '/webhooks/fonnte'
+
+  // (1) verifikasi shared secret — wajib bila FONNTE_WEBHOOK_SECRET di-set.
+  // Tanpa secret ter-set: hanya boleh lolos di mode dev (Clerk off); di
+  // production tanpa secret → tolak (fail-closed, jangan buka surface polos).
+  const cfgSecret = c.env.FONNTE_WEBHOOK_SECRET
+  const gotSecret = c.req.query('secret') || ''
+  if (cfgSecret) {
+    if (!timingSafeEqual(gotSecret, cfgSecret)) {
+      await logSecurityEvent(c.env, {
+        user: null, requested_tenant: null, actual_tenant: null,
+        endpoint, method: 'POST', action: 'denied_403',
+        reason: 'webhook fonnte: secret salah/kosong — kemungkinan fake webhook',
+      })
+      return c.json({ ok: false, error: 'unauthorized' }, 403)
+    }
+  } else if (isClerkConfigured(c.env)) {
+    await logSecurityEvent(c.env, {
+      user: null, requested_tenant: null, actual_tenant: null,
+      endpoint, method: 'POST', action: 'denied_403',
+      reason: 'webhook fonnte: FONNTE_WEBHOOK_SECRET belum di-set di production — fail-closed',
+    })
+    return c.json({ ok: false, error: 'webhook belum dikonfigurasi' }, 403)
+  }
+
   // Fonnte bisa kirim form-urlencoded atau JSON
   let body: Record<string, any> = {}
   try {
@@ -103,9 +144,40 @@ webhooks.post('/fonnte', async (c) => {
   const incoming = parseFonnteWebhook(body)
   if (!incoming) return c.json({ ok: false, error: 'payload tidak dikenali' }, 400)
 
-  const tenant = await resolveTenant(c, incoming.device)
-  if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan' }, 404)
+  // (2) tenant dari device PENERIMA — satu-satunya jalur, tanpa fallback.
+  if (!incoming.device) {
+    await logSecurityEvent(c.env, {
+      user: null, requested_tenant: null, actual_tenant: null,
+      endpoint, method: 'POST', action: 'denied_403',
+      reason: `webhook fonnte: payload tanpa field device (sender=${incoming.sender})`,
+    })
+    return c.json({ ok: false, error: 'device tidak ada di payload' }, 400)
+  }
+  const dev = await c.env.DB.prepare(
+    'SELECT t.* FROM tenant_wa_devices d JOIN tenants t ON t.id=d.tenant_id WHERE d.device_phone=? AND d.active=1'
+  ).bind(incoming.device).first<any>()
+  if (!dev) {
+    await logSecurityEvent(c.env, {
+      user: null, requested_tenant: incoming.device, actual_tenant: null,
+      endpoint, method: 'POST', action: 'denied_403',
+      reason: `webhook fonnte: device ${incoming.device} tidak terdaftar/nonaktif di tenant_wa_devices — ditolak tanpa fallback`,
+    })
+    return c.json({ ok: false, error: 'device tidak terdaftar' }, 404)
+  }
+  const tenant = dev as Tenant
 
+  // (3) idempotency — INSERT event_key UNIQUE; duplikat → 200 OK tanpa proses
+  // ulang (200 supaya Fonnte berhenti retry; FSM & booking tidak jalan 2x).
+  const eventKey = await eventKeyFromPayload(incoming)
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO wa_webhook_events (event_key,tenant_id,device_phone,sender,created_at) VALUES (?,?,?,?,?)'
+    ).bind(eventKey, tenant.id, incoming.device, incoming.sender, now()).run()
+  } catch {
+    return c.json({ ok: true, duplicate: true, detail: 'event sudah diproses sebelumnya (retry Fonnte di-skip)' })
+  }
+
+  // (4) FSM yang sama dengan simulator + balas via Fonnte send API
   const out = await handleIncoming(c, tenant, incoming.sender, incoming.message, incoming.name || 'Customer WA', false)
   return c.json(out)
 })

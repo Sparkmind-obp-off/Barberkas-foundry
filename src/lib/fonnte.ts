@@ -69,7 +69,9 @@ export interface FonnteIncoming {
   sender: string
   message: string
   name?: string
-  device?: string
+  device?: string   // nomor WA device PENERIMA (62…) — kunci mapping tenant (BKF-19)
+  inboxid?: string  // ID pesan di inbox Fonnte — kunci idempotency (retry-safe)
+  timestamp?: string
 }
 
 export function parseFonnteWebhook(body: Record<string, any>): FonnteIncoming | null {
@@ -80,6 +82,18 @@ export function parseFonnteWebhook(body: Record<string, any>): FonnteIncoming | 
     sender: normalizePhone(sender),
     message,
     name: body.name ? String(body.name) : undefined,
-    device: body.device ? String(body.device) : undefined,
+    device: body.device ? normalizePhone(String(body.device)) : undefined,
+    inboxid: body.inboxid != null ? String(body.inboxid) : undefined,
+    timestamp: body.timestamp != null ? String(body.timestamp) : undefined,
   }
+}
+
+// Constant-time string compare (hindari timing attack pada shared secret webhook).
+export function timingSafeEqual(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a)
+  const eb = new TextEncoder().encode(b)
+  if (ea.length !== eb.length) return false
+  let diff = 0
+  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i]
+  return diff === 0
 }
