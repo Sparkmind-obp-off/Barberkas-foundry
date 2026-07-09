@@ -67,12 +67,14 @@ async function handleIncoming(c: any, tenant: Tenant, phone: string, message: st
     ? { ok: false, mode: 'stub' as const, detail: 'simulate=1 — tidak kirim WA nyata' }
     : await fonnteSend(c.env, phone, result.reply)
 
-  // log pesan keluar
+  // log pesan keluar — BKF-21: simpan juga error Fonnte + sanitize_level supaya
+  // kegagalan outbound TERLIHAT alasannya di DB (bukan cuma status 'failed' buta)
   await c.env.DB.prepare(
-    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,error,sanitize_level,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(uid('wa_'), tenant.id, 'out', phone, result.reply, 'receptionist',
     simulate ? 'simulated' : sent.ok ? 'sent' : sent.mode === 'stub' ? 'stub' : 'failed',
-    (sent as any).id || null, now()).run()
+    (sent as any).id || null, (sent as any).error || (sent as any).detail || null,
+    (sent as any).sanitize_level ?? null, now()).run()
 
   return {
     ok: true,
@@ -232,9 +234,10 @@ webhooks.post('/fonnte/test-send', async (c) => {
   if (!tenant) return c.json({ ok: false, error: 'tenant tidak ditemukan — sertakan ?tenant=<subdomain> yang valid' }, 404)
   const sent = await fonnteSend(c.env, b.target, b.message)
   await c.env.DB.prepare(
-    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,error,sanitize_level,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(uid('wa_'), tenant.id, 'out', normalizePhone(String(b.target)), String(b.message), 'manual',
-    sent.ok ? 'sent' : (sent as any).mode === 'stub' ? 'stub' : 'failed', (sent as any).id || null, now()).run()
+    sent.ok ? 'sent' : (sent as any).mode === 'stub' ? 'stub' : 'failed', (sent as any).id || null,
+    (sent as any).error || null, (sent as any).sanitize_level ?? null, now()).run()
   return c.json({ ...sent, tenant: tenant.subdomain })
 })
 

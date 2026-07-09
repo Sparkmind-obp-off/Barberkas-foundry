@@ -159,10 +159,11 @@ retention.post('/run-due', async (c) => {
     await c.env.DB.prepare('UPDATE customer_reminders SET status=?, fonnte_id=?, sent_at=?, updated_at=? WHERE id=?')
       .bind(st, res.id || null, st === 'failed' ? null : t, t, r.id).run()
 
-    // log ke wa_messages agar tampil di WA log dashboard
+    // log ke wa_messages agar tampil di WA log dashboard (BKF-21: + error & sanitize_level)
     await c.env.DB.prepare(
-      'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
-    ).bind(uid('wa_'), r.tenant_id, 'out', r.phone, r.message, r.kind === 'retention' ? 'retention' : 'reminder', st, res.id || null, t).run()
+      'INSERT INTO wa_messages (id,tenant_id,direction,phone,body,agent_type,status,fonnte_id,error,sanitize_level,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+    ).bind(uid('wa_'), r.tenant_id, 'out', r.phone, r.message, r.kind === 'retention' ? 'retention' : 'reminder', st, res.id || null,
+      res.error || null, (res as any).sanitize_level ?? null, t).run()
 
     report.push({ id: r.id, kind: r.kind, phone: r.phone, result: st, error: res.error || null })
   }
