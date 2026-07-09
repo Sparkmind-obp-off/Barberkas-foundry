@@ -3,6 +3,8 @@
 GROQ_API_KEY=
 OPENROUTER_API_KEY=
 FONNTE_TOKEN=
+# Shared secret utk verifikasi webhook Fonnte (?secret= di URL webhook) — generate: openssl rand -hex 24
+FONNTE_WEBHOOK_SECRET=
 WABLAS_TOKEN=
 # Duitku Pop (MoR rel uang via Oasis BI Pro)
 DUITKU_MERCHANT_CODE=DXXXXX

@@ -6,6 +6,7 @@ export type Bindings = {
   GROQ_API_KEY?: string
   OPENROUTER_API_KEY?: string
   FONNTE_TOKEN?: string
+  FONNTE_WEBHOOK_SECRET?: string   // shared secret di URL webhook Fonnte (?secret=) — Fonnte tak punya HMAC
   // Duitku Pop (MoR rel uang via Oasis BI Pro):
   DUITKU_MERCHANT_CODE?: string   // cth: D20919
   DUITKU_MERCHANT_KEY?: string    // API key (rahasia — wrangler secret put)
