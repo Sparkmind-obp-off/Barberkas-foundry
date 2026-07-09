@@ -158,6 +158,23 @@ window.uiGotoTab = (tab) => { const b = document.querySelector(`.nav-item[data-t
 window.uiClick = (id) => { const el = document.getElementById(id); if (el) el.click(); };
 window.uiFocus = (id) => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (el.focus) el.focus(); } };
 
+// ── T3 (Design System Sesi): Skeleton loading — anti "flash of empty content" ──
+// Template mimic bentuk komponen asli (stat/list/feed/tile) supaya layout gak
+// lompat saat data masuk. Hanya dipasang saat container masih placeholder
+// (first paint) — refresh berikutnya pakai pola stale-while-revalidate:
+// konten lama tetap tampil sampai data baru siap (gak ada flicker skeleton).
+const SK = {
+  stat: `<div class="sk-stat"><span class="skeleton sk-line" style="width:60%;height:10px"></span><span class="skeleton sk-line" style="width:45%;height:24px"></span><span class="skeleton sk-line" style="width:72%;height:8px"></span></div>`,
+  item: `<div class="sk-item"><div><span class="skeleton sk-line" style="width:42%"></span><span class="skeleton sk-line" style="width:68%;height:9px"></span></div><span class="skeleton sk-line" style="width:64px;height:14px;flex:none"></span></div>`,
+  feed: `<div class="sk-feed"><span class="skeleton sk-line" style="width:36%;height:9px"></span><span class="skeleton sk-line" style="width:92%"></span><span class="skeleton sk-line" style="width:58%"></span></div>`,
+  tile: `<div class="sk-tile"><span class="skeleton" style="width:32px;height:32px;border-radius:var(--radius-md)"></span><span class="skeleton sk-line" style="width:70%"></span><span class="skeleton sk-line" style="width:92%;height:8px"></span></div>`,
+};
+function skShow(id, tpl, n) {
+  const el = $(id);
+  if (!el) return;
+  if (el.childElementCount === 0 || el.querySelector('.loading') || el.querySelector('.skeleton')) el.innerHTML = tpl.repeat(n);
+}
+
 // ── Tab navigation ──
 document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -180,6 +197,8 @@ $('tenant-switch').addEventListener('change', (e) => {
 
 // ── HOME ──
 async function loadHome() {
+  skShow('stat-grid', SK.stat, 4);
+  skShow('agent-feed', SK.feed, 3);
   const d = await api('/dashboard');
   $('tier-badge').textContent = (d.tier || '').toUpperCase();
   $('tier-badge').className = `badge ${tierClass(d.tier)}`;
@@ -215,6 +234,7 @@ async function loadHome() {
 
 // ── TRANSAKSI ──
 async function loadTx() {
+  skShow('tx-list', SK.item, 5);
   const { transactions } = await api('/transactions');
   $('tx-list').innerHTML = transactions.length
     ? transactions.map((t) => `
@@ -227,6 +247,7 @@ async function loadTx() {
 
 // ── AI ──
 async function loadAi() {
+  skShow('agent-list', SK.tile, 6);
   const { agents, tier } = await api('/agents');
   $('agent-list').innerHTML = agents.map((a) => `
     <div class="agent-tile ${a.available ? '' : 'disabled'}" data-type="${a.type}" data-available="${a.available}">
@@ -245,7 +266,8 @@ async function callAgent(type, available) {
     out.innerHTML = `<p class="muted">Agent <strong>${type}</strong> belum tersedia di tier ini / masih roadmap (Truth-Lock: no overpromise). Upgrade tier untuk akses.</p>`;
     return;
   }
-  out.innerHTML = '<div class="loading">AI sedang bekerja…</div>';
+  // T3: loading text + skeleton baris hasil — kasih sinyal visual AI lagi menyusun output
+  out.innerHTML = `<div class="loading">AI sedang bekerja…</div>${SK.feed}`;
   let input = {};
   if (type === 'content') input = { platform: 'instagram', theme: 'promo weekend' };
   if (type === 'stylist') {
@@ -262,6 +284,7 @@ async function callAgent(type, available) {
 
 // ── CUSTOMER ──
 async function loadCust() {
+  skShow('cust-list', SK.item, 5);
   const { customers } = await api('/customers');
   $('cust-list').innerHTML = customers.length
     ? customers.map((c) => `
@@ -274,6 +297,7 @@ async function loadCust() {
 
 // ── BOOKING ──
 async function loadBook() {
+  skShow('book-list', SK.item, 4);
   const { bookings } = await api('/bookings');
   $('book-list').innerHTML = bookings.length
     ? bookings.map((b) => `
@@ -350,6 +374,9 @@ function loadDuitkuJs(url) {
 }
 
 async function loadOutcome() {
+  skShow('delivery-telemetry', SK.stat, 4);
+  skShow('catalog-list', SK.item, 3);
+  skShow('orders-list', SK.item, 2);
   // delivery telemetry (TTO + DoO success-rate + GMV) — BKF-16: admin-gated.
   // Non-admin dapat 403 → tampilkan info jujur, bukan error.
   const tel = await oapi('/telemetry/delivery');
@@ -481,6 +508,10 @@ const sapi = async (path, opts = {}) =>
   fetch(`/api/v1/subscriptions${path}${path.includes('?') ? '&' : '?'}tenant=${TENANT}`, { ...opts, headers: await authHeaders({ 'x-tenant': TENANT, ...(opts.headers || {}) }) }).then((r) => r.json());
 
 async function loadSubs() {
+  skShow('subs-telemetry', SK.stat, 4);
+  skShow('subs-list', SK.item, 2);
+  skShow('upsell-list', SK.item, 2);
+  skShow('reminders-list', SK.item, 3);
   // telemetry
   const t = await sapi('/telemetry');
   $('subs-telemetry').innerHTML = `
@@ -597,6 +628,9 @@ async function waSend(msg) {
 }
 
 async function loadRetention() {
+  skShow('ret-telemetry', SK.stat, 4);
+  skShow('ret-list', SK.item, 3);
+  skShow('wa-log', SK.item, 3);
   const t = await rapi('/telemetry');
   $('ret-telemetry').innerHTML = `
     <div class="stat"><div class="stat-label">Reminder terjadwal</div><div class="stat-value">${t.reminders_scheduled}</div></div>
@@ -650,6 +684,7 @@ const aapi = async (path, opts = {}) =>
   fetch(`/api/v1/auth${path}`, { ...opts, headers: await authHeaders(opts.headers || {}) }).then((r) => r.json());
 
 async function loadAdmin() {
+  skShow('admin-tenant-list', SK.item, 3);
   const res = await aapi('/tenants');
   const list = $('admin-tenant-list');
   if (res.error) { list.innerHTML = `<div class="muted" style="font-size:var(--text-xs)">🔒 ${res.message || res.error}</div>`; return; }

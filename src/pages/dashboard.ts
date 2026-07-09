@@ -1,4 +1,10 @@
 // Dashboard PWA shell — mobile-first, steel-blue, bottom nav (Design System §9).
+// T3 (Design System Sesi): tab HOME (first paint) render skeleton server-side —
+// zero "flash of empty content" bahkan sebelum app.js sempat jalan.
+// Template identik dengan SK.stat / SK.feed di app.js (satu bahasa visual).
+const SK_STAT = `<div class="sk-stat"><span class="skeleton sk-line" style="width:60%;height:10px"></span><span class="skeleton sk-line" style="width:45%;height:24px"></span><span class="skeleton sk-line" style="width:72%;height:8px"></span></div>`;
+const SK_FEED = `<div class="sk-feed"><span class="skeleton sk-line" style="width:36%;height:9px"></span><span class="skeleton sk-line" style="width:92%"></span><span class="skeleton sk-line" style="width:58%"></span></div>`;
+
 export function dashboardPage(): string {
   return `<!DOCTYPE html>
 <html lang="id" data-theme="dark">
@@ -39,10 +45,10 @@ export function dashboardPage(): string {
   <!-- HOME -->
   <section class="tab-panel" id="tab-home">
     <h2 class="panel-title">Ringkasan Hari Ini</h2>
-    <div class="stat-grid" id="stat-grid"><div class="loading">Memuat…</div></div>
+    <div class="stat-grid" id="stat-grid">${SK_STAT.repeat(4)}</div>
     <div class="doo-badge" id="doo-badge"></div>
     <h3 class="sub-title">Bukti AI Staff bekerja <span class="count-badge" id="feed-count"></span></h3>
-    <div id="agent-feed" class="feed"><div class="loading">Memuat…</div></div>
+    <div id="agent-feed" class="feed">${SK_FEED.repeat(3)}</div>
   </section>
 
   <!-- TRANSAKSI -->

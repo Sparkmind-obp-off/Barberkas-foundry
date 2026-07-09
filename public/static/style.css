@@ -230,6 +230,36 @@ a { color: var(--accent); text-decoration: none; }
 
 .loading { color: var(--text-muted); padding: var(--space-4); text-align: center; }
 
+/* ── T3 (Design System Sesi): Skeleton loading — CSS-only, nol library ──
+   Anti "flash of empty content" saat nunggu fetch. Shimmer pakai transform
+   translateX (GPU-composited, ringan di HP low-end — bukan animasi
+   background-position yang memicu repaint). Bentuk mengikuti komponen asli
+   (stat card / list item / feed) supaya layout gak lompat saat data masuk. */
+.skeleton { position: relative; overflow: hidden; background: var(--bg-elevated); border-radius: var(--radius-sm); }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(232,238,247,.07), transparent);
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes sk-shimmer { 100% { transform: translateX(100%); } }
+/* Hormati preferensi aksesibilitas — matikan shimmer, sisakan pulse halus */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+  .skeleton { animation: sk-pulse 1.6s ease-in-out infinite; }
+  @keyframes sk-pulse { 50% { opacity: .6; } }
+}
+/* Baris teks skeleton — tinggi/lebar diatur inline per pemakaian */
+.sk-line { display: block; height: 12px; }
+/* Skeleton stat card — mimic .stat (label kecil + angka besar + sub) */
+.sk-stat { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: var(--space-2); }
+/* Skeleton list item — mimic .list-item (main+sub kiri, amount kanan) */
+.sk-item { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); box-shadow: var(--shadow-sm); }
+.sk-item > div { display: flex; flex-direction: column; gap: var(--space-1h); flex: 1; }
+/* Skeleton feed item — mimic .feed-item (meta pendek + 2 baris teks) */
+.sk-feed { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-md); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1h); box-shadow: var(--shadow-sm); }
+/* Skeleton tile agent — mimic .agent-tile (ikon + judul + deskripsi, center) */
+.sk-tile { background: var(--bg-surface); border: 1px solid var(--surface-border-accent); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; align-items: center; gap: var(--space-2); box-shadow: var(--shadow-card); }
+
 /* ── UI-polish P2: empty state hidup (ikon besar + CTA aksen brand) ── */
 .empty-state {
   background: var(--bg-surface);
