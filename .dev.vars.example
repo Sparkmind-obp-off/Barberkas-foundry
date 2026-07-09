@@ -5,6 +5,9 @@ OPENROUTER_API_KEY=
 FONNTE_TOKEN=
 # Shared secret utk verifikasi webhook Fonnte (?secret= di URL webhook) — generate: openssl rand -hex 24
 FONNTE_WEBHOOK_SECRET=
+# BKF-20: mode paket FREE Fonnte — '1' = selalu soft-sanitize kiriman WA (bullet/emoji-berat dilunakkan),
+# '2' = selalu plain-text. Kosong/'0' = kirim format asli dulu; sanitize otomatis hanya saat Fonnte menolak.
+FONNTE_FREE_SANITIZE=
 WABLAS_TOKEN=
 # Duitku Pop (MoR rel uang via Oasis BI Pro)
 DUITKU_MERCHANT_CODE=DXXXXX

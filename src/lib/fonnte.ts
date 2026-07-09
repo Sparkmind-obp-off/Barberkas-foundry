@@ -61,15 +61,17 @@ async function fonnteSendRaw(token: string, phone: string, message: string): Pro
 // attempt#1 pesan asli → jika ditolak "invalid message request on free package",
 // attempt#2 versi soft-sanitized (L1) → masih ditolak, attempt#3 plain-text (L2).
 // Hasilnya: bot tetap membalas customer di paket free — degradasi format, bukan gagal total.
-// startLevel > 0 dipakai saat pre-sanitize aktif (env FONNTE_FREE_SANITIZE, T3).
+// startLevel eksplisit meng-override env flag FONNTE_FREE_SANITIZE ('1'|'2' =
+// pre-sanitize semua kiriman mulai level tsb — mode paket free, T3).
 export async function fonnteSend(
   env: Bindings,
   target: string,
   message: string,
-  startLevel: SanitizeLevel = 0
+  startLevel?: SanitizeLevel
 ): Promise<FonnteSendResult> {
   const token = env.FONNTE_TOKEN
   const phone = normalizePhone(target)
+  const effStart: SanitizeLevel = startLevel ?? envSanitizeLevel(env)
 
   if (!token) {
     return { ok: false, mode: 'stub', detail: 'FONNTE_TOKEN belum di-set — pesan tidak dikirim (Truth-Lock).' }
@@ -77,7 +79,7 @@ export async function fonnteSend(
 
   let last: FonnteSendResult = { ok: false, mode: 'live', error: 'not_attempted' }
   let prevText: string | null = null
-  for (let lvl = startLevel; lvl <= 2; lvl++) {
+  for (let lvl = effStart; lvl <= 2; lvl++) {
     const text = freePackageSanitize(message, lvl as SanitizeLevel)
     // skip level yang tidak mengubah teks (mis. pesan tanpa emoji/bullet) — hemat kuota
     if (prevText !== null && text === prevText) continue
@@ -159,6 +161,16 @@ export function freePackageSanitize(message: string, level: SanitizeLevel): stri
     .replace(/\n{2,}/g, '\n')
     .trim()
   return m
+}
+
+// BKF-20/T3: baca env flag FONNTE_FREE_SANITIZE → level awal sanitasi.
+// '1' = selalu soft-sanitize sebelum kirim (hemat 1 attempt di paket free),
+// '2' = selalu plain-text, kosong/'0'/nilai lain = mulai dari format asli.
+export function envSanitizeLevel(env: Bindings): SanitizeLevel {
+  const v = String(env.FONNTE_FREE_SANITIZE || '').trim()
+  if (v === '1') return 1
+  if (v === '2') return 2
+  return 0
 }
 
 // Deteksi penolakan khas paket free Fonnte (pesan "template-like" diblokir).

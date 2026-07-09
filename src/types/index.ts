@@ -7,6 +7,7 @@ export type Bindings = {
   OPENROUTER_API_KEY?: string
   FONNTE_TOKEN?: string
   FONNTE_WEBHOOK_SECRET?: string   // shared secret di URL webhook Fonnte (?secret=) — Fonnte tak punya HMAC
+  FONNTE_FREE_SANITIZE?: string    // BKF-20: '1'|'2' = pre-sanitize semua kiriman WA mulai level tsb (mode paket free); kosong/'0' = kirim format asli dulu, sanitize hanya saat ditolak
   // Duitku Pop (MoR rel uang via Oasis BI Pro):
   DUITKU_MERCHANT_CODE?: string   // cth: D20919
   DUITKU_MERCHANT_KEY?: string    // API key (rahasia — wrangler secret put)
