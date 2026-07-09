@@ -88,6 +88,57 @@ export function parseFonnteWebhook(body: Record<string, any>): FonnteIncoming | 
   }
 }
 
+// ── Free-package sanitizer (BKF-20) ─────────────────────────────
+// Fonnte paket FREE menolak pesan yang terdeteksi "template-like"
+// (reason: "invalid message request on free package") — pemicu umum:
+// bullet •, struktur list padat, formatting berat. Sanitizer ini
+// mendegradasi FORMAT saja, isi pesan tetap utuh.
+//
+// Level 1 (soft) — aman untuk semua pesan:
+//   • → -, ├/└/│ → -, em/en-dash — – → -, collapse >2 newline jadi 2,
+//   trim spasi ekor tiap baris.
+// Level 2 (hard) — last resort bila level 1 masih ditolak:
+//   level 1 + strip marker *bold* / _italic_ / ~strike~ / ```mono```
+//   (teks di dalamnya dipertahankan), hapus emoji/pictograph,
+//   collapse newline ganda jadi 1 (bentuk paragraf polos).
+export type SanitizeLevel = 0 | 1 | 2
+
+export function freePackageSanitize(message: string, level: SanitizeLevel): string {
+  if (level === 0) return message
+  let m = message
+  // Level 1 — degradasi struktur "template-like"
+  m = m
+    .replace(/[•▪◦●]/g, '-')
+    .replace(/[├└│┌┐┘]/g, '-')
+    .replace(/[—–]/g, '-')
+    .split('\n').map((l) => l.replace(/\s+$/g, '')).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  if (level === 1) return m
+  // Level 2 — plain text total
+  m = m
+    // strip marker formatting WA, pertahankan isinya: *x* _x_ ~x~ ```x```
+    .replace(/```([\s\S]*?)```/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/~([^~\n]+)~/g, '$1')
+    // hapus emoji & pictograph (surrogate-pair ranges + simbol umum)
+    .replace(/[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F02F}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '')
+    // rapikan sisa spasi ganda akibat emoji hilang
+    .split('\n').map((l) => l.replace(/ {2,}/g, ' ').replace(/\s+$/g, '')).join('\n')
+    // paragraf polos: newline ganda → tunggal
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+  return m
+}
+
+// Deteksi penolakan khas paket free Fonnte (pesan "template-like" diblokir).
+export function isFreePackageReject(error?: string): boolean {
+  if (!error) return false
+  const e = error.toLowerCase()
+  return e.includes('invalid message request') || (e.includes('free package') && e.includes('invalid'))
+}
+
 // Constant-time string compare (hindari timing attack pada shared secret webhook).
 export function timingSafeEqual(a: string, b: string): boolean {
   const ea = new TextEncoder().encode(a)
