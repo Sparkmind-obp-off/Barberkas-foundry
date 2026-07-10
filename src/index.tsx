@@ -7,6 +7,7 @@ import outcome from './routes/outcome'
 import subscriptions from './routes/subscriptions'
 import webhooks from './routes/webhooks'
 import retention from './routes/retention'
+import waops from './routes/waops'
 import { authMiddleware, tenantParamGuard } from './middleware/auth'
 import { landingPage } from './pages/landing'
 import { dashboardPage } from './pages/dashboard'
@@ -47,6 +48,13 @@ app.route('/api/v1/subscriptions', subscriptions)
 // BKF-13 — Retensi customer: reminder H-1 booking + retensi 3-4 minggu + run-due Fonnte.
 app.use('/api/v1/retention/*', authMiddleware, tenantParamGuard)
 app.route('/api/v1/retention', retention)
+
+// BKF-22 — WA Ops: monitoring READ-ONLY wa_messages (tab observability dashboard).
+// Gerbang sama dengan retention (auth + isolasi ?tenant=); breakdown lintas
+// tenant digerbang admin di dalam routes/waops.ts.
+app.use('/api/v1/wa-ops', authMiddleware, tenantParamGuard)
+app.use('/api/v1/wa-ops/*', authMiddleware, tenantParamGuard)
+app.route('/api/v1/wa-ops', waops)
 
 // API — kasir/booking/agents (tenant-scoped penuh: auth → tenant → requireTenantAccess).
 // WAJIB paling akhir di antara /api/v1/* (lihat catatan urutan mount di atas).
